@@ -14,12 +14,23 @@ DISPLAY_TILE_GRID = False
 DISPLAY_TILE_GRID_OUTPUT = False
 PLAYER_START_MONEY = 200
 
+BASE_LAYER = 1
+INVENTORY_LAYER = 2
+SLOT_LAYER = 3
+TILE_LAYER = 4
+MOVING_TILE_LAYER = 100
+
 HEARTBEAT_INTERVAL_SECS = 10.0
+CLEANUP_GAME_IDLE_SECS = 60 * 15
 WAIT_POLL_INTERVAL = 3.0
 STD_HEADER_LENGTH = 10
 MAX_RECONNECT_TIME = 16
 WILD_CARD = "*"
 MAX_LETTERS_ON_HOLD = 8
+
+# button props
+BTN_SH_OFFSET = 5
+BTN_CORNER_RAD = 10
 
 CLIENT_DEFAULT_SETTINGS_FILE = Path.home().absolute().joinpath('.buygame/.default_settings.yaml')
 CLIENT_SETTINGS_FILE = Path.home().absolute().joinpath('.buygame/client_settings.yaml')
@@ -52,11 +63,12 @@ SERVER_SETTINGS_TEMPLATE = {
     "game_settings": {
         "last_gen_id": "0",
         "store_path": f"{STORE_PATH}",
-        "player_start_money": f"{PLAYER_START_MONEY}"
+        "player_start_money": f"{PLAYER_START_MONEY}",
+        "cleanup_game_idle_secs": f"{CLEANUP_GAME_IDLE_SECS}"
     }
 }
 
-FPS = 30  # frames per second, the general speed of the program
+FPS = 25  # frames per second, the general speed of the program
 MAX_RETRY = 5
 NL_DELIM = '\\\\'
 # WINDOWWIDTH = 800 # size of window's width in pixels
@@ -73,6 +85,7 @@ class Colors(Enum):
     DARK_GRAY = (128, 128, 128)
     LT_GRAY = (200, 200, 200)
     LTR_GRAY = (180, 180, 180)
+    LTS_GRAY = (230, 230, 230)
     NAVY_BLUE = (60, 60, 100)
     WHITE = (255, 255, 255)
     RED = (255, 0, 0)
@@ -116,11 +129,12 @@ class ClientMsgReq(Enum):
     Start = "start:"
     Dice = "dice:"
     Buy = "buy:"
-    Cancel_Buy = "cancel_buy:"
+    Skip_Buy = "skip_buy:"
     Sell = "sell:"
-    Cancel_Sell = "cancel_sell:"
+    Discard_Sell = "discard_sell:"
     Get = "get:"
     HeartBeat = "heartbeat:"
+    EndTurn = "end_turn:"
     Is_Done = "is_done:"
     Played = "played:"
 
@@ -136,16 +150,18 @@ class ClientResp(Enum):
     GET_RET = "get_return:"
     Racks_Ready = "racks ready:"
     Bought = "bought:"
-    Buy_Cancelled = "buy_cancelled:"
+    Buy_Skipped = "buy_skipped:"
     Sold = "sold:"
-    Sold_Sell_Again = "sold_sell_again:"
+    Must_Sell = "must_sell:"
     Sell_Cancelled_Sell_Again = "sell_cancelled_sell_again:"
-    Sell_Cancelled = "sell_cancelled:"
+    Sell_Discarded = "sell_discarded:"
     Sell_Failed = "sell_failed:"
-    Turn_End = "turn ended:"
+    Turn_Ended = "turn_ended:"
     Played = "played:"
     Done = "done:"
     Not_Ready = "not_ready:"
+    Cannot_Roll = "cannot_roll:"
+    Cannot_Buy = "cannot_buy:"
 
     def __init__(self, text: str):
         self.msg = text
@@ -159,13 +175,16 @@ class GameUIStatus(Enum):
     DICE_ROLL_COMPLETE = auto()
     BUY_ENABLED = auto()
     BUY = auto()
-    CANCEL_BUY = auto()
+    SKIP_BUY = auto()
+    SHOW_SELL = auto()
+    SELL_DISPLAYED = auto()
     ENABLE_SELL = auto()
     SELL_ENABLED = auto()
 
     SELL = auto()
-    CANCEL_SELL = auto()
+    DISCARD_SELL = auto()
     I_PLAYED = auto()
+    TERMINATE = auto()
 
     ERROR = auto()
 
@@ -205,6 +224,7 @@ class NotificationType(Enum):
     ERR = auto()
     ACT_1 = auto()
     ACT_2 = auto()
+    FLASH = auto()
 
     def __repr__(self):
         return self.name
@@ -216,18 +236,20 @@ class NotificationType(Enum):
 class Txn(Enum):
     INIT = auto()
     ROLLED = auto()
+    BAG_EMPTY = auto()
     NO_BUY = auto()
     BOUGHT = auto()
-    BUY_CANCELLED = auto()
+    BUY_SKIPPED = auto()
     SOLD = auto()
-    SOLD_SELL_AGAIN = auto()
-    SELL_CANCELLED = auto()
+    MUST_SELL = auto()
+    SELL_DISCARDED = auto()
+    TURN_COMPLETE = auto()
     SELL_CANCELLED_SELL_AGAIN = auto()
     NO_SELL = auto()
     BUY_FAILED = auto()
-    BUY_CANCEL_FAILED = auto()
+    BUY_SKIP_FAILED = auto()
     SELL_FAILED = auto()
-    SELL_CANCEL_FAILED = auto()
+    SELL_DISCARD_FAILED = auto()
 
     def __repr__(self):
         return self.name
@@ -260,4 +282,51 @@ class WelcomeState(Enum):
 
     def __str__(self):
         return f"wc={self.__repr__()}"
+
+
+class InventoryType(Enum):
+    BUY_RACK = "Buy Rack"
+    WORD_RACK = "Word Rack"
+    TILE_RACK = "Tile Rack"
+    WILD_CARD_RACK = "WildCard Rack"
+
+    def __init__(self, name):
+        self.inv_name = name
+
+    def __repr__(self):
+        return self.inv_name
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class GameStage(Enum):
+    INIT = auto()
+    ROLL = auto()
+    BUY = auto()
+    SELL = auto()
+    ROUND_COMPLETE = auto()
+    END_SELL_ONLY = auto()
+    TERMINATE = auto()
+
+    def __repr__(self):
+        return self.name
+
+    def __str__(self):
+        return f"gst={self.__repr__()}"
+
+
+class GameStatus(Enum):
+    START = auto()
+    RUNNING = auto()
+    PAUSED = auto()
+    RESUMED = auto()
+    ABANDONED = auto()
+    COMPLETED = auto()
+
+    def __repr__(self):
+        return self.name
+
+    def __str__(self):
+        return f"gs={self.__repr__()}"
 

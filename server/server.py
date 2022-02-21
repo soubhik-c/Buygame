@@ -5,8 +5,6 @@ Created on Fri Mar 26 13:40:58 2021
 @author: Boss
 """
 import datetime
-import pickle
-import random
 import signal
 import socket
 import os
@@ -14,6 +12,7 @@ import os
 import threading
 import time
 from _thread import *
+from collections import deque
 from threading import Event
 
 import pandas as pd
@@ -25,9 +24,11 @@ import yaml
 
 from common.game import *
 from common.gameconstants import *
+from common.gameconstants import GameStage
 from common.logger import log
 from datetime import datetime
 
+from common.player import Player
 from common.utils import serialize, receive_message, ObjectType, write_file
 from server.server_utils import SignalHandler
 from server.socket import ClientSocket
@@ -213,18 +214,42 @@ class Server:
     def cleanup_thread(self):
         while not self.cleanup_interval.is_set():
             curr_ts = datetime.now()
+
+            # handle stale client socket
             i = len(self.client_sockets_list) - 1
             while i >= 0:
                 log(f"i = {i} and cslist = {len(self.client_sockets_list)}") if VERBOSE else None
                 _cs = self.client_sockets_list[i]
                 # if we miss 5 heartbeats in a row, time to close that socket
                 x = (curr_ts - _cs.last_hb_received).total_seconds()
-                y = (HEARTBEAT_INTERVAL_SECS * 2.0)
+                y = (HEARTBEAT_INTERVAL_SECS * 5.0)
                 if x > y:
-                    log(f"Cleaning up player {_cs} socket")
+                    log(f"Cleaning up player {_cs} socket, last hb received @{_cs.last_hb_received}")
                     stale = self.client_sockets_list.pop(i)
                     stale.mark_inactive()
                 i -= 1
+
+            # handle stale game objects
+            with self.handshake_lock:
+                i = len(self.games) - 1
+                while i >= 0:
+                    _g: Game = self.games[i]
+                    # if the game is paused for too long (15 mins default)
+                    x = (curr_ts - _g.last_activity_time).total_seconds()
+                    if _g.game_status == GameStatus.PAUSED and x > _g.max_idle_secs:
+                        # timedelta(0,_g.max_idle_secs).__str__()
+                        log(f"Cleaning up game {_g} after {_g.max_idle_secs/60:.02f} min(s),"
+                            f"last_activity @{_g.last_activity_time}")
+                        stale = self.games.pop(i)
+                        with stale.game_mutex:
+                            stale.abandon_game()
+                    elif _g.game_status == GameStatus.COMPLETED:
+                        complete = self.games.pop(i)
+                        with complete.game_mutex:
+                            complete.close()
+
+                    i -= 1
+
             self.cleanup_interval.wait(HEARTBEAT_INTERVAL_SECS)
 
     def handle_client_msg(self, _cs: ClientSocket, decoded_p: int,
@@ -236,128 +261,93 @@ class Server:
         (msg_enum, data) = payload.split(':')
         log(f"client request: {msg_enum} - {data}") if msg_enum not in ClientMsgReq.HeartBeat.msg else None
         client_req: ClientMsgReq = ClientMsgReq.parse_msg_string(msg_enum + ':')
-        # %% set player ready
-        if ClientMsgReq.HeartBeat == client_req:
-            log("sending heartbeat response") if VERBOSE else None
-            _cs.socket.sendall(serialize(ObjectType.MESSAGE, ClientMsgReq.HeartBeat.msg))
-            _cs.set_last_active_ts()
-            return
-        # elif ClientMsgReq.Start == client_req:
-        #     log("player wants to start game ")
-        #     # sets player ready
-        #     current_game.getPlayer(decoded_p).set_start()
-        #     # %%  check if all connected are ready
-        #     readyMessage = ""
-        #     for player in current_game.getPlayers():
-        #         if player.start is False:
-        #             readyMessage += f" {player.number} not ready "
-        #     if readyMessage:
-        #         current_game.setServerMessage(
-        #             f"Not all players are ready. status {current_game.isReady()}")
-        #     # %% sets leader
-        #     else:
-        #         _p: Player = random.choice(current_game.getPlayers())
-        #         current_game.setPlayer(_p.number)
-        #         current_game.setReady(_p.number)
-        #         # self.games[_game_id] = current_game
-        #         current_game.setServerMessage(
-        #             "game ready to start ")
-        #     # %%
-        #
-        # elif ClientMsgReq.Name == client_req:
-        #     client_name = data
-        #     current_game.getPlayer(decoded_p).name = client_name
-        #     log(current_game.getPlayer(decoded_p).name)
-        #     current_game.setServerMessage("player changed name")
-        elif ClientMsgReq.Dice == client_req:
-            diceValue = int(data)
-            log(f"diceValue is {diceValue}")
-            game.player_rolled(_cs.player, diceValue)
-            game.set_server_message(ClientResp.Racks_Ready.msg)
+        game.set_last_activity_ts()
 
-        elif ClientMsgReq.Get == client_req:
-            msgs_notified_upto = int(str(data).removeprefix("notifications_received="))
-            _q: deque = _cs.player.notify_msg
-            while _q.__len__() > 0:
-                n = _q.__iter__().__next__()
-                if n.n_id <= msgs_notified_upto:
-                    _popped_m = _cs.player.notify_msg.popleft()
-                    if VERBOSE:
-                        log(f"discarding notify msg {_popped_m}")
-                else:
-                    break
-            game.set_server_message(f"{_cs.player}")
-            # if VERBOSE:
-            #     game.set_server_message(f"{ClientResp.GET_RET.msg} {_cs.player}")
-            # else:
-            #     log(f"{ClientResp.GET_RET.msg} {_cs.player}")
+        try:
+            if ClientMsgReq.HeartBeat == client_req:
+                log("sending heartbeat response") if VERBOSE else None
+                _cs.socket.sendall(serialize(ObjectType.MESSAGE, ClientMsgReq.HeartBeat.msg))
+                _cs.set_last_active_ts()
+                return
 
-        elif ClientMsgReq.Buy == client_req:
-            try:
-                _cs.player.buy_word()
-                game.set_server_message(f"{ClientResp.Bought.msg} Player {decoded_p}")
-            except Exception as e:
-                log(f"{game} {_cs.player} buy failed", e)
+            elif ClientMsgReq.Dice == client_req:
+                diceValue = int(data)
+                log(f"diceValue is {diceValue}")
+                if game.is_invalid_op(_cs.player, "cannot roll"):
+                    game.set_server_message(ClientResp.Cannot_Roll.msg)
+                    return
+                game.player_rolled(_cs.player, diceValue)
+                game.set_server_message(ClientResp.Racks_Ready.msg)
 
-        elif ClientMsgReq.Cancel_Buy == client_req:
-            try:
-                _cs.player.cancel_buy(game.bag)
-                game.set_server_message(f"{ClientResp.Buy_Cancelled.msg} Player {decoded_p}")
-            except Exception as e:
-                log(f"{game} {_cs.player} buy cancellation failed", e)
+            elif ClientMsgReq.Get == client_req:
+                msgs_notified_upto = int(str(data).removeprefix("notifications_received="))
+                _q: deque = _cs.player.notify_msg
+                while _q.__len__() > 0:
+                    n = _q.__iter__().__next__()
+                    if n.n_id <= msgs_notified_upto:
+                        _popped_m = _cs.player.notify_msg.popleft()
+                        if VERBOSE:
+                            log(f"discarding notify msg {_popped_m}")
+                    else:
+                        break
+                game.set_server_message(f"{_cs.player}")
 
-        elif ClientMsgReq.Sell == client_req:
-            try:
+            elif ClientMsgReq.Buy == client_req:
+                if game.is_invalid_op(_cs.player, "cannot buy"):
+                    game.set_server_message(ClientResp.Cannot_Buy.msg)
+                    return
+
+                try:
+                    _cs.player.buy_word()
+                    game.set_server_message(f"{ClientResp.Bought.msg} Player {decoded_p}")
+                except Exception as e:
+                    log(f"{game} {_cs.player} buy failed", e)
+
+            elif ClientMsgReq.Skip_Buy == client_req:
+                try:
+                    _cs.player.skip_buy(game.bag)
+                    game.set_server_message(f"{ClientResp.Buy_Skipped.msg} Player {decoded_p}")
+                except Exception as e:
+                    log(f"{game} {_cs.player} buy cancellation failed", e)
+
+            elif ClientMsgReq.Sell == client_req:
+                try:
+                    word = data
+                    _cs.player.sell(word, self.word_dict_csv)
+                    if _cs.player.txn_status == Txn.MUST_SELL:
+                        game.set_server_message(f"{ClientResp.Must_Sell.msg} word={word}")
+                    elif _cs.player.txn_status == Txn.SOLD:
+                        game.set_server_message(f"{ClientResp.Sold.msg} word={word}")
+                    elif _cs.player.txn_status == Txn.SELL_FAILED:
+                        game.set_server_message(f"{ClientResp.Sell_Failed.msg} word={word}")
+                except Exception as e:
+                    log(f"{game} {_cs.player} sell failed", e)
+
+            elif ClientMsgReq.Discard_Sell == client_req:
                 word = data
-                _cs.player.sell(word, self.word_dict_csv)
-                if _cs.player.txn_status == Txn.SOLD_SELL_AGAIN:
-                    game.set_server_message(f"{ClientResp.Sold_Sell_Again.msg} word={word}")
-                elif _cs.player.txn_status == Txn.SOLD:
-                    game.set_server_message(f"{ClientResp.Sold.msg} word={word}")
-                elif _cs.player.txn_status == Txn.SELL_FAILED:
-                    game.set_server_message(f"{ClientResp.Sell_Failed.msg} word={word}")
-            except Exception as e:
-                log(f"{game} {_cs.player} sell failed", e)
+                _cs.player.discard_sell(word)
+                if _cs.player.txn_status == Txn.SELL_DISCARDED:
+                    game.set_server_message(f"{ClientResp.Sell_Discarded.msg} Player {decoded_p}")
 
-        elif ClientMsgReq.Cancel_Sell == client_req:
-            _cs.player.cancel_sell()
-            if _cs.player.txn_status == Txn.SELL_CANCELLED_SELL_AGAIN:
-                game.set_server_message(f"{ClientResp.Sell_Cancelled_Sell_Again.msg}"
-                                        f" Player {decoded_p}")
-            elif _cs.player.txn_status == Txn.SELL_CANCELLED:
-                game.set_server_message(f"{ClientResp.Sell_Cancelled.msg} Player {decoded_p}")
-        """# %%
-        elif ClientMsgReq.Is_Done == client_req:
-            round_enquiry = int(data)
-            assert round_enquiry <= game.round
-            if round_enquiry == game.round:
-                readyOrNot = game.checkReady()
-                if not readyOrNot:
-                    msg = ClientResp.Done.msg + f" round: {current_game.turn}"
-                    current_game.nextTurn()
-                    current_game.set_server_message(msg + f" curPlayer {current_game.currentPlayer}")
-                else:
-                    line = ",".join([name for name in readyOrNot])
-                    line += " is " + ClientResp.Not_Ready.msg + " in round " + str(current_game.turn)
-                    current_game.set_server_message(line)
-            elif round_enquiry < current_game.turn:
-                current_game.set_server_message(ClientResp.Done.msg + f" prev round: {round_enquiry}")
-        # %%
-        elif ClientMsgReq.Played == client_req:
-            current_game.getPlayer(decoded_p).played = True
-            current_game.set_server_message(f"{ClientResp.Played.msg} Player {decoded_p}")
-        """
-        # self.games[_game_id] = current_game
-        serverMessage = game.get_server_message()
-        if len(serverMessage.strip()) > 0:
-            log(f"serverMessage: {serverMessage} ")
-        _cs.socket.sendall(serialize(ObjectType.OBJECT, game))
-        _cs.set_last_active_ts()
-        # game.set_server_message(" ")
+            elif ClientMsgReq.EndTurn == client_req:
+                _cs.player.end_turn()
+                if _cs.player.txn_status == Txn.MUST_SELL:
+                    game.set_server_message(f"{ClientResp.Must_Sell.msg} Player {decoded_p}")
+                elif _cs.player.txn_status == Txn.TURN_COMPLETE:
+                    game.set_server_message(f"{ClientResp.Turn_Ended.msg} Player {decoded_p}")
+
+        finally:
+            # self.games[_game_id] = current_game
+            serverMessage = game.get_server_message()
+            if len(serverMessage.strip()) > 0:
+                log(f"serverMessage: {serverMessage} ")
+            _cs.socket.sendall(serialize(ObjectType.OBJECT, game))
+            _cs.set_last_active_ts()
+            # game.set_server_message(" ")
 
     def handshake(self, cs: ClientSocket):
         retries = MAX_RETRY
-        while True:
+        while self.is_server_active:
             payload = receive_message(cs.socket, True)
             if not bool(payload):
                 if retries > 0:
@@ -393,7 +383,8 @@ class Server:
 
             g = None
             for _g in self.games:
-                if _g.game_id == game_id and _g.begin_time == begin_time:
+                if _g.game_status.value < GameStatus.ABANDONED.value and \
+                        _g.game_id == game_id and _g.begin_time == begin_time:
                     g = _g
                     break
 
@@ -401,7 +392,9 @@ class Server:
                 if len(self.games) == 0:
                     return None
 
-                open_games = list(filter(lambda _g: _g.game_state != GameState.END and len(_g.players()) == 1,
+                open_games = list(filter(lambda _g: _g.game_status.value < GameStatus.ABANDONED.value
+                                         and len(_g.players()) == 1
+                                         and _g.players()[0].name != player_name,
                                          self.games))
                 if len(open_games) > 0:
                     latest_g = open_games[0]

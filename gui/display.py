@@ -1,9 +1,12 @@
+import itertools
 import os
 
 import pygame
 from pygame.event import Event
 from pygame.font import Font
 from pygame.locals import *
+
+from common import gameconstants
 from common.gameconstants import *
 
 
@@ -84,7 +87,9 @@ class Display(pygame.sprite.Sprite):
     __i: __disp__ = None
 
     def __init__(self, h_margin_cells, v_margin_cells, width_cells, height_cells):
-        super(Display, self).__init__()
+        self._layer = 1
+        # super(Display, self).__init__()
+        pygame.sprite.Sprite.__init__(self)
         self.h_margin_cells = h_margin_cells
         self.v_margin_cells = v_margin_cells
         self.width_cells = width_cells
@@ -93,7 +98,6 @@ class Display(pygame.sprite.Sprite):
         self.y = 0
         self.width = 0
         self.height = 0
-        self._layer = 1
         Display.refresh_dims(self)
 
     def xmargin(self):
@@ -120,7 +124,7 @@ class Display(pygame.sprite.Sprite):
         # cls.__i.window.blit(frame, frame.get_rect())
         # cls.__i.window.blit(cls.__i.surface, Display.dims())
         cls.__i.window.blit(pygame.transform.scale(cls.__i.surface, (cls.__i.win_w, cls.__i.win_h)), (0, 0))
-        pygame.display.flip()
+        pygame.display.update()
 
     @classmethod
     def resize(cls, event: Event, post_rsz: lambda w, h: None):
@@ -180,13 +184,14 @@ class Display(pygame.sprite.Sprite):
     def display_grid(cls):
         instance = cls.__i
         y, x = 0, 0
-        if DISPLAY_TILE_GRID:
-            for _h in range(0, instance.win_h, Display.TILE_SIZE):
-                for _w in range(0, instance.win_w, Display.TILE_SIZE):
-                    pygame.draw.rect(instance.surface, Colors.LT_GRAY.value, Rect(_w, _h,
-                                                                                Display.TILE_SIZE,
-                                                                                Display.TILE_SIZE),
-                                     1)
+        if gameconstants.DISPLAY_TILE_GRID:
+            for _h in range(0, instance.win_h, 3):
+                for _w in range(0, instance.win_w, 3):
+                    # pygame.draw.rect(instance.surface, Colors.LTS_GRAY.value, Rect(_w, _h,
+                    #                                                                Display.TILE_SIZE,
+                    #                                                                Display.TILE_SIZE),
+                    #                  1)
+                    pygame.draw.circle(instance.surface, Colors.BLACK.value, (_w, _h), 2)
                     if y < len(instance.grid) and x < len(instance.grid[y]):
                         instance.grid[y][x] = 1
                     x += 1
