@@ -60,7 +60,11 @@ class MainMenu:
         self.login_button: Optional[TextButton] = None
         self.create_screen_layout()
         self.messagebox = None
-        self.server_endpoint = None
+        if self.game_settings.__contains__('target_server_defaults'):
+            svr_defs = self.game_settings['target_server_defaults']
+            self.server_endpoint = f"{svr_defs['ip']:{svr_defs['port']}}"
+        else:
+            self.server_endpoint = None
 
     def on_user_choice(self, o: RadioButton.Option):
         if len(self.controls) > 1:
@@ -221,6 +225,8 @@ class MainMenu:
                     if self.login_button is not None and \
                             self.login_button.click(ss_mx, ss_my):
                         self.login_button.mouse_up()
+                        if self.input_validation_failed():
+                            continue
                         self.login()
                         continue
 
@@ -246,15 +252,9 @@ class MainMenu:
                             self.messagebox = None
                             continue
 
-                        c = self.controls[self.cur_input_field]
-                        if len(c.text.strip()) == 0:
-                            msg = " " + c.p_text + " cannot be empty"
-                            self.messagebox = MessageBox(self.surface.get_width(), self.surface.get_height(),
-                                                         20, 5,
-                                                         msg,
-                                                         "ok", blink=True)
-                            self.messagebox.show()
+                        if self.input_validation_failed():
                             continue
+
                         self.move_next_control(event)
                     else:
                         if self.cur_input_field == 0 and \
@@ -313,12 +313,12 @@ class MainMenu:
             return
         self.controls[self.cur_input_field].begin_input()
 
-    def discover_game_server(self):
+    def discover_game_server(self, _ping_check):
         import requests as reqs
         from bs4 import BeautifulSoup
         import re
 
-        response = reqs.get('http://soubhik.info/games')
+        response = reqs.get('http://soubhik.info/games', verify=False)
         page = BeautifulSoup(response.content, 'html.parser')
         nested_page = page.find('iframe')['srcdoc']
         buygame_section = BeautifulSoup(nested_page, 'html.parser')
@@ -328,6 +328,15 @@ class MainMenu:
         pattern = re.compile('.*buygame-endpoint->\s*(.*)', re.M)
         self.server_endpoint = pattern.match(buygame_url).group(1)
         log(self.server_endpoint)
+        ep = self.server_endpoint.split(':') if self.server_endpoint is not None else None
+        if ep is not None and len(ep) > 1:
+            ip = ep[0]
+            if _ping_check and os.system("ping -c 1 " + ip) == 0:
+                log("server is alive")
+            svr_defs = self.game_settings['target_server_defaults']
+            svr_defs['ip'] = ip
+            svr_defs['port'] = ep[1]
+            self.save_gamesettings()
 
     def get_ip(self):
         if len(self.controls) > 1:
@@ -342,6 +351,18 @@ class MainMenu:
         elif self.server_endpoint is not None:
             _, port = self.server_endpoint.split(':')
             return port
+
+    def input_validation_failed(self):
+        c = self.controls[self.cur_input_field]
+        if len(c.text.strip()) == 0:
+            msg = " " + c.p_text + " cannot be empty"
+            self.messagebox = MessageBox(self.surface.get_width(), self.surface.get_height(),
+                                         20, 5,
+                                         msg,
+                                         "ok", blink=True)
+            self.messagebox.show()
+            return True
+        return False
 
 # def main():
 #     _reset: bool = False
