@@ -15,7 +15,7 @@ import yaml
 import sys
 
 from gui.login.informed_consent import InformedConsent
-from gui.survey.survey import Survey
+from gui.survey.surveyform import SurveyForm
 
 
 class MainMenu:

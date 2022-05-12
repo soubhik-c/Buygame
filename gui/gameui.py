@@ -22,7 +22,7 @@ from gui.label import MessageList
 from gui.leaderboard import Leaderboard
 from gui.main_menu import MainMenu
 from gui.snap import Inventory
-from gui.survey.survey import Survey
+from gui.survey.surveyform import SurveyForm
 from gui.top_bar import TopBar
 from gui.uiobjects import UITile
 
@@ -133,7 +133,7 @@ class GameUI:
         self.last_notification_received = 0
         self.current_round = -1
         self.alert_boxes = []
-        self.post_game_survey: Optional[Survey] = None
+        self.post_game_survey: Optional[SurveyForm] = None
 
     def quit(self):
         self.main_menu.save_gamesettings()
@@ -823,7 +823,7 @@ class GameUI:
 
     def create_post_game_survey(self):
         gameconstants.DISPLAY_TILE_GRID = True
-        self.post_game_survey = Survey(self.submit_post_game_survey)
+        self.post_game_survey = SurveyForm(self.submit_post_game_survey)
         s = self.post_game_survey
         s.add_post_game_survey_grid()
         s.add_post_game_survey_inputs()
