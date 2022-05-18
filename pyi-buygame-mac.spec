@@ -37,21 +37,8 @@ exe = EXE(pyz,
           disable_windowed_traceback=False,
           target_arch=None,
           codesign_identity=None,
-          entitlements_file=None )
+          entitlements_file=None , icon='gui/tiles/bentley-logo.jpg')
 app = BUNDLE(exe,
              name='pyi-buygame-mac.app',
-             icon=None,
-             bundle_identifier=None,
-             info_plist={
-                         'NSPrincipalClass': 'NSApplication',
-                         'NSAppleScriptEnabled': False,
-                         'CFBundleDocumentTypes': [
-                             {
-                                 'CFBundleTypeName': 'My File Format',
-                                 'CFBundleTypeIconFile': 'MyFileIcon.icns',
-                                 'LSItemContentTypes': ['com.example.myformat'],
-                                 'LSHandlerRank': 'Owner'
-                                 }
-                             ]
-                         },
-	    )
+             icon='gui/tiles/bentley-logo.jpg',
+             bundle_identifier=None)
