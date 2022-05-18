@@ -1,4 +1,4 @@
-from enum import Enum, auto
+from enum import Enum
 
 from common.gameconstants import NL_DELIM, LINE_CONT
 
@@ -49,9 +49,9 @@ class SurveyGridQHeaders(Enum):
            f"Strongly{NL_DELIM}Disagree"])
 
     H2 = ([f"Much More{NL_DELIM}Creative",
-           f"More{NL_DELIM}Creative",
-           f"Not More/Less{NL_DELIM}Creative",
-           f"Less{NL_DELIM}Creative",
+           f"More{LINE_CONT}{NL_DELIM}Creative",
+           f"{LINE_CONT}Generally{NL_DELIM}Creative",
+           f"Less{LINE_CONT}{NL_DELIM}Creative",
            f"Much Less{NL_DELIM}Creative"])
 
     @classmethod
@@ -172,7 +172,7 @@ def deserialize_survey_input_result(ser_obj: str):
 
 
 class PreGQs(GameSurveyQs):
-    Q1 = "First and Last Name:"
+    Q1 = "Full Name:"
     Q2 = "Your age:"
     Q3 = "Which race/ethnicity best describes you"
     Q4 = "Native Language"
@@ -197,9 +197,12 @@ class PreGQs(GameSurveyQs):
 class PreGGQs_1(GameSurveyQs):
     Q1 = "Writing a poem"
     Q2 = "Coming up with a new way to think about an old debate"
-    Q3 = "Figuring out how to integrate critiques and suggestions while revising a work "
-    Q4 = "Gathering the best possible assortment of articles or papers to support a specific point of view"
-    Q5 = "Researching a topic using many different types of sources that may not be readily apparent "
+    Q3 = f"Figuring out how to integrate critiques {NL_DELIM}\
+        {LINE_CONT} and suggestions while revising a work "
+    Q4 = f"Gathering the best possible assortment of articles or {NL_DELIM}\
+        {LINE_CONT} papers to support a specific point of view"
+    Q5 = f"Researching a topic using many different types of {NL_DELIM}\
+        {LINE_CONT} sources that may not be readily apparent "
     Q6 = "Choosing the best solution to a problem "
     Q7 = "Thinking of new ways to solve a problem "
 
@@ -212,7 +215,8 @@ class PreGGQs_2(GameSurveyQs):
     Q1 = "I am good at playing word games."
     Q2 = "I am a competitive person."
     Q3 = "I am always actively looking for new information"
-    Q4 = "I see links between seemingly unrelated pieces of information"
+    Q4 = f"I see links between seemingly {NL_DELIM}\
+           {LINE_CONT} unrelated pieces of information"
     Q5 = "I am good at “connecting dots.”"
     Q6 = "I don’t afraid to take risks"
     Q7 = "I excel at identifying opportunities"
@@ -223,4 +227,3 @@ class PreGGQs_2(GameSurveyQs):
     @classmethod
     def parse_msg_string(cls, enum_id: int):
         return cls(enum_id)
-

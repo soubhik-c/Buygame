@@ -15,6 +15,7 @@ import yaml
 import sys
 
 from gui.login.informed_consent import InformedConsent
+from gui.login.pregame_survey import PreGameSurvey
 from gui.survey.surveyform import SurveyForm
 
 
@@ -399,6 +400,12 @@ class MainMenu:
         ic = InformedConsent()
         ic.main()
         self.informed_consent_done = True
+        s = PreGameSurvey()
+        s.add_input_fields()
+        s.add_grid_1()
+        s.add_grid_2()
+        s.main()
+
         # gameconstants.DISPLAY_TILE_GRID = True
         # self.post_game_survey = Survey(self.submit_post_game_survey)
         # s = self.post_game_survey

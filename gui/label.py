@@ -14,14 +14,17 @@ class Label(Display):
 
     def __init__(self, h_margin_cells, v_margin_cells, width_cells, height_cells,
                  align: Align = Align.CENTER,
-                 font_sz: int = 12, color: Colors = Colors.BLACK, border_color: Colors = None):
+                 font_sz: int = 12,
+                 font_nm: str = "timesnewroman",
+                 italic: bool = True,
+                 color: Colors = Colors.BLACK, border_color: Colors = None):
         super().__init__(h_margin_cells, v_margin_cells, width_cells, height_cells)
         self.__text = "INITIAL TEXT"
         self.align: Align = align
         self.font_sz = font_sz
         self.color: Colors = color
         self.border_color = border_color
-        self.font = pygame.font.SysFont("timesnewroman", self.font_sz, italic=True)
+        self.font = pygame.font.SysFont(font_nm, self.font_sz, italic=italic)
         self.__label_txt = self.font.render(self.__text, True, (0, 0, 0))
         self.v_margin_cells += (self.__label_txt.get_height() * TILE_ADJ_MULTIPLIER)
         self.__label_x = 0
@@ -38,11 +41,14 @@ class Label(Display):
 
     def refresh_dims(self):
         if self.align == Align.CENTER:
-            self.__label_x = self.x + self.width / 2 - self.__label_txt.get_width() / 2,
+            self.__label_x = self.x + self.width / 2 - self.__label_txt.get_width() / 2
             self.__label_y = self.y + self.height / 2 - self.__label_txt.get_height() / 2 + 10
         elif self.align == Align.RIGHT:
             self.__label_x = self.x + self.width - self.__label_txt.get_width() - INIT_TILE_SIZE
             self.__label_y = self.y + self.height / 2 - self.__label_txt.get_height() / 2 + 10
+        elif self.align == Align.LEFT:
+            self.__label_x = self.x  # + self.width - self.__label_txt.get_width() - INIT_TILE_SIZE
+            self.__label_y = self.y  # + self.height / 2 - self.__label_txt.get_height() / 2 + 10
 
     def draw(self, win):
         win.blit(self.__label_txt, (self.__label_x, self.__label_y))

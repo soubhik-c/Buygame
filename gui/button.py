@@ -178,9 +178,12 @@ class RadioButton(Button):
                  text_offset=(28, 1),
                  option_offset=(.2, .2),
                  horizontal=False,
+                 font_nm="comicsans",
+                 font_sz=22,
                  fill_color: Colors = Colors.LTR_GRAY,
                  font_color: Colors = Colors.BLACK,
                  border_color: Colors = Colors.LTS_GRAY,
+                 option_color: Colors = Colors.LT_GRAY,
                  check_color: Colors = Colors.BLACK):
         super().__init__(x, y, width, height, fill_color=fill_color, border_color=border_color)
 
@@ -190,8 +193,9 @@ class RadioButton(Button):
         #              text_offset=(28, 1), font='comicsans'):
         self.fill_color = fill_color
         self.border_color = border_color
+        self.option_color = option_color
         self.check_color = check_color
-        self.text_font = pygame.font.SysFont("comicsans", 22)
+        self.text_font = pygame.font.SysFont(font_nm, font_sz)
         self.font_color = font_color
         self.to = text_offset
         self.oo = option_offset
@@ -225,13 +229,13 @@ class RadioButton(Button):
         def draw(self, surface):
             offset = 6 * TILE_ADJ_MULTIPLIER
             if self.checked:
-                pygame.draw.circle(surface, self.rb.border_color.value, (self.x + offset, self.y + offset),
+                pygame.draw.circle(surface, self.rb.option_color.value, (self.x + offset, self.y + offset),
                                    5)
                 pygame.draw.circle(surface, self.rb.check_color.value, (self.x + offset, self.y + offset),
                                    4)
 
             elif not self.checked:
-                pygame.draw.circle(surface, self.rb.border_color.value, (self.x + offset, self.y + offset),
+                pygame.draw.circle(surface, self.rb.option_color.value, (self.x + offset, self.y + offset),
                                    5)
                 pygame.draw.circle(surface, self.rb.fill_color.value, (self.x + offset, self.y + offset),
                                    4)
@@ -494,10 +498,14 @@ class InputText:
         self.in_focus = False
         # self.settings[self.field] = self.text
 
+    def height(self):
+        pr = self.prompt.get_rect()
+        return pr.height + 10
+
     def draw(self, win: pygame.Surface):
         n = Display.name(self.text)
         pr = self.prompt.get_rect()
-        _x, _y = (self.x + pr.width, self.y + pr.height + 10)
+        _x, _y = (self.x + pr.width, self.y + self.height())
         if self.in_focus:
             pygame.draw.line(win, Colors.BLACK.value,
                              (_x, _y),

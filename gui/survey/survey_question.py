@@ -43,3 +43,6 @@ class SurveyQuestion:
 
     def str_result(self) -> str:
         pass
+
+    def clear(self):
+        pass

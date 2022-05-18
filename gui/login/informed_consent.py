@@ -240,7 +240,7 @@ class InformedConsent(FontMixin, SubSurface):
             skip_starting_blanks = False
             self.surface.blit(line[1], line[2])
         # last page
-        if self.sec_pos >= len(self.section_pages) - 1:
+        if self.run and self.sec_pos >= len(self.section_pages) - 1:
             l_coord = spg[-1][2]
             self.create_user_sign(*l_coord,
                                   font=self.font,
@@ -257,7 +257,9 @@ class InformedConsent(FontMixin, SubSurface):
         pygame.display.update()
 
     def submit_useragree(self):
-        pass
+        self.user_sign.disable()
+        self.user_sign.hide()
+        self.run = False
 
     def create_user_sign(self, basex, lasty, **kwargs):
         input_texts = [

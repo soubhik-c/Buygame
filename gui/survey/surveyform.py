@@ -1,17 +1,15 @@
-import pygame_widgets
 import pygame
+import pygame_widgets
 from pygame.constants import KEYUP, K_ESCAPE, VIDEORESIZE
 
 from common.gameconstants import TILE_ADJ_MULTIPLIER, FPS, Colors
-from common.gamesurvey import PGGQs, SurveyGridQHeaders, PGIQs, SURVEY_QSEQ_DELIM, \
+from common.gamesurvey import SURVEY_QSEQ_DELIM, \
     serialize_survey_grid_result, deserialize_survey_input_result, \
     serialize_survey_input_result, deserialize_survey_grid_result
 from common.logger import logger, log
 from gui.button import TextButton
 from gui.gui_common.display import Display
 from gui.gui_common.subsurface import SubSurface
-from gui.survey.survey_grid import SurveyQuestionGrid
-from gui.survey.survey_multiinetext import SurveyQuestionInputText
 from gui.survey.survey_question import SurveyQuestion
 
 
@@ -38,6 +36,7 @@ class SurveyForm(SubSurface):
         self.submit_act = submit_action
         self.run = True
         self.has_parent = has_parent
+        self.pregame = True
 
     def main(self, input_game=None):
         clock = pygame.time.Clock()
@@ -92,6 +91,8 @@ class SurveyForm(SubSurface):
         if not self.has_parent:
             Display.surface().fill(Colors.BLACK.value)
         super().draw(events)
+        if not self.run:
+            return
         self.prev_button.draw(self.surface)
         self.next_button.draw(self.surface)
         self.s_questions_seq[self.s_questions_pos].draw(self.surface)
@@ -164,6 +165,9 @@ class SurveyForm(SubSurface):
         self.s_questions_seq.append(ques)
 
     def submit_survey(self):
+        if self.pregame:
+            self.run = False
+            return
         g = self.s_questions_seq[0]
         s1 = serialize_survey_grid_result(g.gqh, g.get_result())
         s2 = serialize_survey_input_result(self.s_questions_seq[1].get_result())
@@ -179,4 +183,3 @@ class SurveyForm(SubSurface):
             print("\n".join([f"{q},{r}" for q, r in sg]))
             print("\n".join([f"{q},{t}" for q, t in si]))
         self.run = False
-
