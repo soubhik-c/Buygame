@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=0.5
+version=0.6
 
 [[ -d build ]] && rm -r build
 [[ -d dist ]] && rm -r dist
