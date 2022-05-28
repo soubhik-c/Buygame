@@ -263,7 +263,7 @@ class SurveyQuestionInputText(SurveyQuestion):
         pass
 
     def get_surface(self):
-        return self.ssurface.surface
+        return self.ssurface
 
     def str_result(self):
         return SURVEY_Qs_DELIM.join([_i.str_result() for _i in self.inputs])

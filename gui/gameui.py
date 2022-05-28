@@ -20,6 +20,7 @@ from gui.chat import Chat
 from gui.gui_common.display import Display
 from gui.label import MessageList
 from gui.leaderboard import Leaderboard
+from gui.login.postgame_survey import PostGameSurvey
 from gui.main_menu import MainMenu
 from gui.snap import Inventory
 from gui.survey.surveyform import SurveyForm
@@ -32,7 +33,6 @@ class GameUI:
         Display.init()
         self.do_login = True
         self.main_menu = main_menu
-        self.target_server_settings = None
         self.player_name = ""
         self.ip = ""
         self.port = 0
@@ -133,7 +133,7 @@ class GameUI:
         self.last_notification_received = 0
         self.current_round = -1
         self.alert_boxes = []
-        self.post_game_survey: Optional[SurveyForm] = None
+        self.post_game_survey: Optional[PostGameSurvey] = None
 
     def quit(self):
         self.main_menu.save_gamesettings()
@@ -236,8 +236,6 @@ class GameUI:
     def heartbeat(self):
         while not self.hb_event.is_set():
             try:
-                player: Player = self.me()
-                # if player.player_state == PlayerState.WAIT or player.player_state == PlayerState.INIT:
                 if True:
                     ret_game = self.network.send(ClientMsgReq.Get.msg +
                                                  "notifications_received=" +
@@ -247,31 +245,6 @@ class GameUI:
                         continue
                     assert isinstance(ret_game, Game)
                     self.set_game(ret_game)
-                    # myself = self.me()
-                    # if myself.player_state == PlayerState.PLAY:
-                    #     if ret_game.game_state == GameState.ROLL:
-                    #         self.game_status = GameUIStatus.ROLL_DICE
-                    #     elif ret_game.game_state == GameState.BUY:
-                    #         self.game_status = GameUIStatus.ENABLE_BUY
-                    #     elif ret_game.game_state == GameState.SELL:
-                    #         self.game_status = GameUIStatus.ENABLE_SELL
-                    #     # self.messagebox_notify(ret_game.get_server_message())
-                    #     self.top_bar.set_connection_status(Colors.GREEN)
-                    # elif myself.player_state == PlayerState.WAIT:
-                    #     self.top_bar.set_connection_status(Colors.YELLOW)
-                # elif self.game_status == GameUIStatus.WAIT_TURN:
-                #     ret_game = self.network.send(ClientMsgReq.Get.msg +
-                #                                  "notifications_received=" +
-                #                                  str(self.last_notification_received)
-                #                                  )
-                #     if ret_game is None:
-                #         continue
-                #     assert isinstance(ret_game, Game)
-                #     self.set_game(ret_game)
-                # elif self.game_status == GameUIStatus.WAIT_ALL_PLAYED:
-                #     self.check_round_complete()
-                # else:
-                #     self.network.heartbeat()
             finally:
                 self.hb_event.wait(WAIT_POLL_INTERVAL)
 
@@ -288,15 +261,12 @@ class GameUI:
             gameconstants.DISPLAY_TILE_GRID = False
 
     def reinitialize(self):
-        self.target_server_settings = self.main_menu.game_settings['target_server_defaults']
         usr_defs = self.main_menu.game_settings['user_defaults']
 
         self.player_name = self.main_menu.controls[0].text
-        input_ip = self.main_menu.get_ip()
-        self.ip = input_ip if len(input_ip) > 0 else self.target_server_settings['ip']
-        input_port = self.main_menu.get_port()
-        self.port = int(input_port) if int(input_port) > 0 else int(self.target_server_settings['port'])
-        self.socket_timeout = int(self.target_server_settings['socket_timeout'])
+        self.ip = self.main_menu.get_ip()
+        self.port: int = self.main_menu.get_port()
+        self.socket_timeout: int = self.main_menu.get_socket_timeout()
 
         if self.player_name not in dict(usr_defs):
             usr_defs[self.player_name] = {}
@@ -637,7 +607,6 @@ class GameUI:
             user_defs['player_id'] = self.my_player_number
             user_defs['name'] = self.player_name
             user_defs['session_id'] = new_session_id
-            self.target_server_settings['ip'] = self.main_menu.get_ip()
             self.main_menu.save_gamesettings()
 
             if game is None:
@@ -823,11 +792,9 @@ class GameUI:
 
     def create_post_game_survey(self):
         gameconstants.DISPLAY_TILE_GRID = True
-        self.post_game_survey = SurveyForm(self.submit_post_game_survey)
-        s = self.post_game_survey
-        s.add_post_game_survey_grid()
-        s.add_post_game_survey_inputs()
+        self.post_game_survey = PostGameSurvey(self.send_survey)
+        self.post_game_survey.main()
 
-    def submit_post_game_survey(self, msg):
-        ret_game = self.network.send(ClientMsgReq.PostGameSurvey.msg + msg)
+    def send_survey(self, req: ClientMsgReq, msg):
+        ret_game = self.network.send(req.msg + msg)
         self.set_game(ret_game)

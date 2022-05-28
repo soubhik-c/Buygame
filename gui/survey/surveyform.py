@@ -36,7 +36,6 @@ class SurveyForm(SubSurface):
         self.submit_act = submit_action
         self.run = True
         self.has_parent = has_parent
-        self.pregame = True
 
     def main(self, input_game=None):
         clock = pygame.time.Clock()
@@ -165,21 +164,5 @@ class SurveyForm(SubSurface):
         self.s_questions_seq.append(ques)
 
     def submit_survey(self):
-        if self.pregame:
+        if self.submit_act():
             self.run = False
-            return
-        g = self.s_questions_seq[0]
-        s1 = serialize_survey_grid_result(g.gqh, g.get_result())
-        s2 = serialize_survey_input_result(self.s_questions_seq[1].get_result())
-        msg = SURVEY_QSEQ_DELIM.join([s1, s2])
-        log("SUBMIT SURVERY\n" + msg)
-        if self.submit_act is not None:
-            self.submit_act(msg)
-        else:
-            ds1, ds2 = msg.split(SURVEY_QSEQ_DELIM)
-            sg = deserialize_survey_grid_result(ds1)
-            si = deserialize_survey_input_result(ds2)
-            print("SB: DESER values to track")
-            print("\n".join([f"{q},{r}" for q, r in sg]))
-            print("\n".join([f"{q},{t}" for q, t in si]))
-        self.run = False

@@ -6,6 +6,7 @@ SURVEY_QSEQ_DELIM = ';[[[]]];'
 SURVEY_Qs_DELIM = ';'
 SURVEY_Qs_HDR_DELIM = '--;--'
 SURVEY_Qitxt_DELIM = ';--;'
+SURVEY_QUEST_CLS_DELIM = "&&&--&&&"
 
 
 class QHeader:
@@ -130,17 +131,27 @@ class PGGQs(GameSurveyQs):
         return cls(enum_id)
 
 
-def serialize_survey_grid_result(h: SurveyGridQHeaders, result: [(GameSurveyQs, QHeader)]):
-    return str(h.value) + SURVEY_Qs_HDR_DELIM + SURVEY_Qs_DELIM.join([f"{q.value},{r.chosen}" for q, r in result])
+def serialize_survey_grid_result(sqclass: str, h: SurveyGridQHeaders, result: [(GameSurveyQs, QHeader)]):
+    return sqclass + SURVEY_QUEST_CLS_DELIM +\
+        str(h.value) + SURVEY_Qs_HDR_DELIM + SURVEY_Qs_DELIM.join([f"{q.value},{r.chosen}" for q, r in result])
 
 
 def deserialize_survey_grid_result(ser_obj: str):
+    sqcls, results = ser_obj.split(SURVEY_QUEST_CLS_DELIM)
     res: [GameSurveyQs, QHeader] = []
-    hdr, bdy = ser_obj.split(SURVEY_Qs_HDR_DELIM)
+    hdr, bdy = results.split(SURVEY_Qs_HDR_DELIM)
     h = SurveyGridQHeaders.parse_msg_string(hdr)
     for qs in bdy.split(SURVEY_Qs_DELIM):
         q, rc = qs.split(',')
-        res.append((PGGQs.parse_msg_string(int(q)),
+        if sqcls == "PGGQs":
+            qo = PGGQs.parse_msg_string(int(q))
+        elif sqcls == "PreGGQs_1":
+            qo = PreGGQs_1.parse_msg_string(int(q))
+        elif sqcls == "PreGGQs_2":
+            qo = PreGGQs_2.parse_msg_string(int(q))
+        else:
+            raise Exception(f"{sqcls} not recognized")
+        res.append((qo,
                     h.h.__copy__().set_chosen(int(rc))))
     return res
 
@@ -155,19 +166,27 @@ class PGIQs(GameSurveyQs):
         return cls(enum_id)
 
 
-def serialize_survey_input_result(result: [(GameSurveyQs, str)]):
-    return SURVEY_Qitxt_DELIM.join([f"{q.value}{SURVEY_Qs_DELIM}{t}" for q, t in result])
+def serialize_survey_input_result(sqclass: str, result: [(GameSurveyQs, str)]):
+    return sqclass + SURVEY_QUEST_CLS_DELIM +\
+           SURVEY_Qitxt_DELIM.join([f"{q.value}{SURVEY_Qs_DELIM}{t}" for q, t in result])
 
 
 def deserialize_survey_input_result(ser_obj: str):
+    sqcls, results = ser_obj.split(SURVEY_QUEST_CLS_DELIM)
     res: [(GameSurveyQs, str)] = []
     import re
-    deserpat = re.compile(f"(\\d{1}?){SURVEY_Qs_DELIM}(\".*?\")$", re.M)
+    deserpat = re.compile(f"(\\d+?){SURVEY_Qs_DELIM}(\".*?\")$", re.M)
 
-    for qt_line in ser_obj.split(SURVEY_Qitxt_DELIM):
+    for qt_line in results.split(SURVEY_Qitxt_DELIM):
         m = deserpat.match(qt_line)
-        print(m.groups())
-        res.append((PGIQs.parse_msg_string(int(m.group(1))), m.group(2)))
+        # print(m.groups())
+        if sqcls == "PGIQs":
+            q = PGIQs.parse_msg_string(int(m.group(1)))
+        elif sqcls == "PreGQs":
+            q = PreGQs.parse_msg_string(int(m.group(1)))
+        else:
+            raise Exception(f"{sqcls} not recognized")
+        res.append((q, m.group(2)))
     return res
 
 

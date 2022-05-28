@@ -48,7 +48,7 @@ def serialize(o: ObjectType, v: Any):
         std_hdr = get_std_hdr(o, a_pickled)
         return bytes(std_hdr.encode('utf-8') + a_pickled)
     elif o == ObjectType.MESSAGE or o == ObjectType.NOTIFICATION:
-        std_hdr = get_std_hdr(o, v)
+        std_hdr = get_std_hdr(o, v.encode('utf-8'))
         return std_hdr.encode('utf-8') + v.encode('utf-8')
     else:
         raise RuntimeError(f"{o} object type not supported")
@@ -78,7 +78,7 @@ def receive_pickle(client_socket):
             except ConnectionResetError as cre:
                 log(f"Unable to read std header in {calling_func_name(1)}:- {cre.__str__()}")
                 return False
-        assert msg_type == ObjectType.OBJECT
+        # assert msg_type == ObjectType.OBJECT
 
         # print("message_length", message_length)
         message = recvall(client_socket, message_length)

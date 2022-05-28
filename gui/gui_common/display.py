@@ -155,6 +155,10 @@ class Display(pygame.sprite.Sprite):
         return f.render(*args)
 
     @classmethod
+    def font(cls):
+        return cls.__i.name_font
+
+    @classmethod
     def name(cls, text):
         return Display.ff(cls.__i.name_font, text, True, (0, 0, 0))
 

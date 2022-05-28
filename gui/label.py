@@ -39,6 +39,9 @@ class Label(Display):
         # log(len(self.__text))
         # log(f"%s %s %s" % (self.x, self.width, self.x + self.width / 2))
 
+    def get_text(self):
+        return self.__text
+
     def refresh_dims(self):
         if self.align == Align.CENTER:
             self.__label_x = self.x + self.width / 2 - self.__label_txt.get_width() / 2
@@ -52,6 +55,18 @@ class Label(Display):
 
     def draw(self, win):
         win.blit(self.__label_txt, (self.__label_x, self.__label_y))
+
+    def show(self):
+        pass
+
+    def hide(self):
+        pass
+
+    def mouse_down(self, mouse):
+        pass
+
+    def mouse_up(self, mouse):
+        pass
 
 
 class MessageList(Display):

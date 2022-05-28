@@ -7,9 +7,10 @@ from typing import Optional
 
 import pygame
 from pygame.event import Event
+from pygame_widgets.textbox import TextBox
 
-from gui.gui_common.display import Display
 from common.gameconstants import *
+from gui.gui_common.display import Display
 
 
 class Button(Display):
@@ -35,9 +36,9 @@ class Button(Display):
         self.enabled = True
         self.effects = visual_effects
         off = BTN_SH_OFFSET
-        self.border_rect = pygame.Rect(self.x+off, self.y+off, self.width-(2*off), self.height-(2*off))
+        self.border_rect = pygame.Rect(self.x + off, self.y + off, self.width - (2 * off), self.height - (2 * off))
         self.mouse_event_rect = pygame.Rect(self.x, self.y, self.width, self.height)
-        self.button_rect = pygame.Rect(self.x+off, self.y+off, self.width-(2*off), self.height-(2*off))
+        self.button_rect = pygame.Rect(self.x + off, self.y + off, self.width - (2 * off), self.height - (2 * off))
 
     def refresh_dims(self):
         pass
@@ -210,12 +211,12 @@ class RadioButton(Button):
             self.rb: RadioButton = radio
             if not self.rb.horizontal:
                 self.x = x + (INIT_TILE_SIZE / (4 * TILE_ADJ_MULTIPLIER))
-                self.y = y + ((idnum+self.rb.oo[0]) * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE) + \
-                             (INIT_TILE_SIZE / (4 * TILE_ADJ_MULTIPLIER))
+                self.y = y + ((idnum + self.rb.oo[0]) * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE) + \
+                         (INIT_TILE_SIZE / (4 * TILE_ADJ_MULTIPLIER))
             else:
                 adj = self.rb.oo[0] if idnum == 0 else idnum * self.rb.oo[1]
                 self.x = x + (adj * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE) + \
-                             (INIT_TILE_SIZE / (4 * TILE_ADJ_MULTIPLIER))
+                         (INIT_TILE_SIZE / (4 * TILE_ADJ_MULTIPLIER))
                 self.y = y + (INIT_TILE_SIZE / (2 * TILE_ADJ_MULTIPLIER))
             self.caption = caption
             self.show_caption = show_caption
@@ -356,6 +357,10 @@ class RadioButton(Button):
     def get_chosen_option_value(self) -> int:
         return self.last_chosen_option.idnum if self.last_chosen_option is not None else -1
 
+    def get_chosen_option_str(self) -> int:
+        return self.options[self.last_chosen_option.idnum].caption if self.last_chosen_option is not None \
+            else "??"
+
 
 class MessageBox(pygame.sprite.Sprite):
     MAX_LINE_LENGTH = 70
@@ -456,20 +461,35 @@ class MessageBox(pygame.sprite.Sprite):
 
 
 class InputText:
-    def __init__(self, x: int, y: int, prompt,
+    def __init__(self, surface, font,
+                 x: int, y: int, prompt,
                  default: str,
                  in_focus: bool = False,
                  max_length=MAX_NAME_LENGTH):
+        self.surface = surface
+        self.font = font
         self.p_text = prompt
         self.prompt = Display.name(prompt)
         self.p_len = len(prompt)
-        self.text = default
+        self.text = ""
         self.in_focus = in_focus
         self.max_length = max_length
         f = Display.name(' '.join([' ' for _ in range(self.max_length)]))
-        self.clear_field = pygame.Surface((f.get_width(), f.get_height()))
         self.x = x
         self.y = y
+        lw = self.prompt.get_size()[0]
+        tw, th = f.get_width(), 1 * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE
+        self.text_box = TextBox(self.surface,
+                                self.x + lw + INIT_TILE_SIZE, self.y,
+                                tw, th,
+                                font=self.font,
+                                colour=Colors.WHITE.value,
+                                borderColour=Colors.LTR_GRAY.value,
+                                textColour=Colors.BLACK.value,
+                                radius=0, borderThickness=1
+                                )
+        self.text_box.setText(default)
+        self.begin_input()
 
     def __repr__(self):
         return self.text
@@ -480,22 +500,24 @@ class InputText:
         self.text = txt
 
     def type(self, char):
-        if char == "backspace":
-            if len(self.text) > 0:
-                self.text = self.text[:-1]
-        elif char == "space":
-            self.text += " "
-        elif len(char) == 1:
-            self.text += char
-
-        if len(self.text) >= self.max_length:
-            self.text = self.text[:self.max_length]
+        pass
+        # if char == "backspace":
+        #     if len(self.text) > 0:
+        #         self.text = self.text[:-1]
+        # elif char == "space":
+        #     self.text += " "
+        # elif len(char) == 1:
+        #     self.text += char
+        #
+        # if len(self.text) >= self.max_length:
+        #     self.text = self.text[:self.max_length]
 
     def begin_input(self):
-        self.in_focus = True
+        self.text_box.enable()
+        self.text_box.show()
 
     def end_input(self):
-        self.in_focus = False
+        self.text = self.text_box.getText()
         # self.settings[self.field] = self.text
 
     def height(self):
@@ -503,24 +525,21 @@ class InputText:
         return pr.height + 10
 
     def draw(self, win: pygame.Surface):
-        n = Display.name(self.text)
-        pr = self.prompt.get_rect()
-        _x, _y = (self.x + pr.width, self.y + self.height())
-        if self.in_focus:
-            pygame.draw.line(win, Colors.BLACK.value,
-                             (_x, _y),
-                             (_x + n.get_width(), _y),
-                             3)
-        else:
-            pygame.draw.line(win, BG_COLOR.value,
-                             (_x, _y),
-                             (_x + self.clear_field.get_width(), _y),
-                             3)
-
-        self.clear_field.fill(BG_COLOR.value)
-        win.blit(self.clear_field, (self.x + pr.width, self.y))
-        win.blit(n, (self.x + pr.width, self.y))
         win.blit(self.prompt, (self.x, self.y))
+
+    def show(self):
+        self.text_box.enable()
+        self.text_box.show()
+
+    def hide(self):
+        self.text_box.disable()
+        self.text_box.hide()
+
+    def mouse_down(self, mouse):
+        pass
+
+    def mouse_up(self, mouse):
+        pass
 
 
 class ProgressBar(Button):
@@ -528,10 +547,7 @@ class ProgressBar(Button):
                  fill_color: Colors = Colors.LTR_GRAY,
                  border_color: Colors = Colors.LTS_GRAY):
         super().__init__(x, y, width, height, fill_color=fill_color, border_color=border_color)
-        xx = {}
-        # xx.__contains__()
 
     def draw(self, win):
         pygame.draw.rect(win, Colors.GREEN.value, (self.x, self.y, self.width, self.height), 4)
         pass
-

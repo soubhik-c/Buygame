@@ -1,4 +1,8 @@
-from common.gamesurvey import SurveyGridQHeaders, PreGQs, PreGGQs_1, PreGGQs_2
+from common.gameconstants import ClientMsgReq
+from common.gamesurvey import SurveyGridQHeaders, PreGQs, PreGGQs_1, PreGGQs_2, SURVEY_QSEQ_DELIM, \
+    serialize_survey_grid_result, deserialize_survey_grid_result, serialize_survey_input_result, \
+    deserialize_survey_input_result
+from common.logger import log
 from gui.gui_common.display import Display
 from gui.survey.SurveyInput import SurveyInput
 from gui.survey.surveyform import SurveyForm
@@ -7,16 +11,44 @@ from gui.survey.survey_grid import SurveyQuestionGrid
 
 class PreGameSurvey:
 
-    def __init__(self):
-        self.survey = SurveyForm(None, False)
+    def __init__(self, send_survey_action, has_parent=True):
+        self.survey = SurveyForm(self.on_submit, has_parent)
+        self.add_input_fields()
+        self.add_grid_1()
+        self.add_grid_2()
+        self.send_survey_result = send_survey_action
+
+    def on_submit(self):
+        i = self.survey.s_questions_seq[0]
+        s0 = serialize_survey_input_result("PreGQs", i.get_result())
+        g = self.survey.s_questions_seq[1]
+        s1 = serialize_survey_grid_result("PreGGQs_1", g.gqh, g.get_result())
+        g = self.survey.s_questions_seq[2]
+        s2 = serialize_survey_grid_result("PreGGQs_2", g.gqh, g.get_result())
+        ser_msg = SURVEY_QSEQ_DELIM.join([s0, s1, s2])
+        log("SUBMIT PRE GAME SURVEY\n" + ser_msg)
+        if self.send_survey_result is not None:
+            log("about to send to server")
+            self.send_survey_result(ClientMsgReq.PreGameSurvey, ser_msg)
+        else:
+            log("about to locally validate")
+            ds0, ds1, ds2 = ser_msg.split(SURVEY_QSEQ_DELIM)
+            si0 = deserialize_survey_input_result(ds0)
+            sg1 = deserialize_survey_grid_result(ds1)
+            sg2 = deserialize_survey_grid_result(ds2)
+            print("PRE GAME DESERIALIZE values to track")
+            print("\n".join([f"{q},{t}" for q, t in si0]))
+            print("\n".join([f"{q},{r}" for q, r in sg1]))
+            print("\n".join([f"{q},{r}" for q, r in sg2]))
+        return True
 
     def add_input_fields(self):
         si = SurveyInput()
         self.survey.add_survey_question(si)
 
-        pg = si.new_page()
+        pg = si.new_page(self.survey.surface)
         pg.add_input(PreGQs.Q1, 50)
-        pg.add_input(PreGQs.Q2, 5)
+        pg.add_input(PreGQs.Q2, 4)
         pg.add_options(PreGQs.Q3,
                        [
                            "American Indian or Alaskan native",
@@ -61,10 +93,10 @@ class PreGameSurvey:
                        ])
 
         pg.add_line_break()
-        pg.add_input(PreGQs.Q8, 5)
+        pg.add_input(PreGQs.Q8, 4)
 
         # ------------
-        pg = si.new_page()
+        pg = si.new_page(self.survey.surface)
 
         pg.add_options(PreGQs.Q9,
                        [
@@ -126,8 +158,5 @@ class PreGameSurvey:
 if __name__ == '__main__':
     Display.init()
 
-    s = PreGameSurvey()
-    s.add_input_fields()
-    s.add_grid_1()
-    s.add_grid_2()
+    s = PreGameSurvey(None, False)
     s.main()

@@ -138,6 +138,7 @@ class ClientMsgReq(Enum):
     EndTurn = "end_turn:"
     Is_Done = "is_done:"
     Played = "played:"
+    PreGameSurvey = "pre_game_survey:"
     PostGameSurvey = "post_game_survey:"
 
     def __init__(self, text: str):

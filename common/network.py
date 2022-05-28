@@ -125,6 +125,21 @@ class Network:
                 self.is_connected = False
                 raise
 
+    def send_user_registration(self, req: ClientMsgReq, msg):
+        try:
+            self.client = self.create_client_socket(False)
+            self.client.connect(self.addr)
+            self.is_connected = True
+            return self.raw_send(req.msg + msg, False)
+        except Exception as e:
+            if VERBOSE:
+                log("SendRegistration:Network:Connect exception: ", e)
+            raise
+        finally:
+            self.is_connected = False
+            self.client.shutdown(1)
+            self.client.close()
+
     def __connect(self, try_closing: bool) -> Game:
         self.client = self.create_client_socket(try_closing)
         try:
@@ -152,45 +167,31 @@ class Network:
             raise
 
     def send(self, data: str) -> object:
-        sleepTime = 0.01
+        return self.raw_send(data, True)
+
+    def raw_send(self, data: str, check_connect) -> object:
+        sleep_time = 0.01
         while True:
-            self.reconnect()
+            if check_connect:
+                self.reconnect()
 
             with self.con_mutex:
                 try:
-                    # print("trying to send data to server")
                     payload = serialize(ObjectType.MESSAGE, data)
                     self.client.send(payload)
                     self.is_connected = True
-                    # print(f"{data} sent")
                     time.sleep(0.01)
                     data = receive_pickle(self.client)
-                    # time.sleep(1)
                     if bool(data) is not False:
-                        # print(f"[game] {data}")
                         return data
                     else:
                         return None
                 except socket.error as e:
                     log("send failed with", e)
                     self.is_connected = False
-                    time.sleep(sleepTime)
-                    if sleepTime < MAX_RECONNECT_TIME:
-                        sleepTime *= 2
+                    time.sleep(sleep_time)
+                    if sleep_time < MAX_RECONNECT_TIME:
+                        sleep_time *= 2
                         continue
                     else:
                         raise
-
-    # def sendP(self, data):
-    #     while True:
-    #         try:
-    #             # print("trying to send data to server")
-    #             self.client.send(createPickle(data))
-    #             log(f"{data} sent")
-    #             time.sleep(2)
-    #             data = receive_pickle(self.client)
-    #             if data is not False:
-    #                 log(f"[game] {data}")
-    #                 return data
-    #         except socket.error as e:
-    #             log(e)

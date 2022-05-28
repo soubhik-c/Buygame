@@ -4,10 +4,11 @@ Created on Fri Mar 26 13:40:58 2021
 
 @author: Boss
 """
+import csv
 import datetime
+import os
 import signal
 import socket
-import os
 # import thread module
 import threading
 import time
@@ -16,7 +17,6 @@ from collections import deque
 from threading import Event
 
 import pandas as pd
-
 # Creating a TCP socket
 # AF_INET means IPV4
 # SOCK_STREAM means TCP
@@ -24,13 +24,12 @@ import yaml
 
 from common.game import *
 from common.gameconstants import *
+from common.gamesurvey import SURVEY_QSEQ_DELIM, deserialize_survey_input_result, deserialize_survey_grid_result
 from common.logger import log
-from datetime import datetime
-
 from common.player import Player
 from common.utils import serialize, receive_message, ObjectType, write_file
 from server.server_utils import SignalHandler
-from server.socket import ClientSocket
+from server.buygame_socket import ClientSocket
 
 script_path = os.path.dirname(os.path.abspath(__file__))
 
@@ -96,7 +95,7 @@ class Server:
                     log(f"with {_p_settings}")
                     yaml.safe_dump(_p_settings, _fp)
 
-                write_file(SERVER_SETTINGS_FILE,write_back, overwrite=True)
+                write_file(SERVER_SETTINGS_FILE, write_back, overwrite=True)
             self.server_socket.close()  # will generate Bad file descriptor in socket.accept()
         elif sig == signal.SIGKILL:
             self.is_server_active = False
@@ -120,10 +119,23 @@ class Server:
                     # adding client socket to list of users
                     log(f"[CONNECTION] {client_address} connected!")
                     cs = ClientSocket(client_socket, client_address)
-                    g, player = self.handshake(cs)
-                    if g is None:
+                    req, data = self.read_initial_message(cs)
+                    if req is None:
+                        log("ERROR: Did not receive data in a timely manner")
                         cs.close(self.threads_list)
                         continue
+
+                    if ClientMsgReq.PreGameSurvey == req:
+                        res = self.handle_player_registration(data)
+                        cs.socket.sendall(serialize(ObjectType.MESSAGE, "user-registered:"))
+                        time.sleep(0.01)
+                        log(f"[CONNECTION] {client_address} closing socket after player registration {res}")
+                        cs.close(self.threads_list)
+                        time.sleep(1)
+                        continue
+
+                    assert ClientMsgReq.SessionID == req
+                    g, player = self.handshake(data, cs.c_addr[0])
                     cs.post_handshake(g.game_id, player)
                     self.client_sockets_list.append(cs)
                     # always send the game object as response and then may be other responses.
@@ -237,7 +249,7 @@ class Server:
                     x = (curr_ts - _g.last_activity_time).total_seconds()
                     if _g.game_status == GameStatus.PAUSED and x > _g.max_idle_secs:
                         # timedelta(0,_g.max_idle_secs).__str__()
-                        log(f"Cleaning up game {_g} after {_g.max_idle_secs/60:.02f} min(s),"
+                        log(f"Cleaning up game {_g} after {_g.max_idle_secs / 60:.02f} min(s),"
                             f"last_activity @{_g.last_activity_time}")
                         stale = self.games.pop(i)
                         with stale.game_mutex:
@@ -355,7 +367,7 @@ class Server:
             _cs.set_last_active_ts()
             # game.set_server_message(" ")
 
-    def handshake(self, cs: ClientSocket):
+    def read_initial_message(self, cs: ClientSocket):
         retries = MAX_RETRY
         while self.is_server_active:
             payload = receive_message(cs.socket, True)
@@ -366,100 +378,134 @@ class Server:
                 else:
                     return None, None
             retries = MAX_RETRY
-            log(f"handshake: received msg: {payload}")
+            log(f"read_initial_message: received msg: {payload}")
             (msg_enum, data) = payload.split(':')
             client_req: ClientMsgReq = ClientMsgReq.parse_msg_string(msg_enum + ':')
-            assert ClientMsgReq.SessionID == client_req
+            return client_req, data
 
-            import re
-            parts = re.findall("\\[([^[\\]]*)\\]", str(data))
+    def handshake(self, data, ip_addr):
+        import re
+        parts = re.findall("\\[([^[\\]]*)\\]", str(data))
 
-            def split_get(idx):
-                return parts[idx].split('=')[1]
+        def split_get(idx):
+            return parts[idx].split('=')[1]
 
-            # if only player name is received.
-            if len(parts) == 1:
-                game_id = -1
-                begin_time = ""
-                team_id = 0
-                player_id = -1
-                player_name = parts[0]
-            else:
-                game_id = int(split_get(0))
-                team_id = int(split_get(1))
-                player_id = int(split_get(2))
-                player_name = parts[3]
-                begin_time = parts[4]
+        # if only player name is received.
+        if len(parts) == 1:
+            game_id = -1
+            begin_time = ""
+            team_id = 0
+            player_id = -1
+            player_name = parts[0]
+        else:
+            game_id = int(split_get(0))
+            team_id = int(split_get(1))
+            player_id = int(split_get(2))
+            player_name = parts[3]
+            begin_time = parts[4]
 
-            g = None
-            for _g in self.games:
-                if _g.game_status.value < GameStatus.ABANDONED.value and \
-                        _g.game_id == game_id:  # and _g.begin_time == begin_time:
-                    g = _g
-                    break
+        g = None
+        for _g in self.games:
+            if _g.game_status.value < GameStatus.ABANDONED.value and \
+                    _g.game_id == game_id:  # and _g.begin_time == begin_time:
+                g = _g
+                break
 
-            def get_latest_unpaired_game():
-                if len(self.games) == 0:
-                    return None
-
-                open_games = list(filter(lambda _g: _g.game_status.value < GameStatus.ABANDONED.value
-                                         and len(_g.players()) == 1
-                                         and _g.players()[0].name != player_name,
-                                         self.games))
-                if len(open_games) > 0:
-                    latest_g = open_games[0]
-                    return latest_g
-
+        def get_latest_unpaired_game():
+            if len(self.games) == 0:
                 return None
 
-            player = None
-            # if requested game of the player don't exists anymore.
-            if g is None:
-                unpaired_game = get_latest_unpaired_game()
-                if unpaired_game is not None:
-                    typed_g: Game = unpaired_game
-                    player_id = 1
-                    player = Player(typed_g, int(nofw), player_id, player_name, team_id,
-                                    unpaired_game.get_game_bag())
-                    typed_g.add_player(player_id, player)
-                    log(f"attaching new player {player} to an existing game {unpaired_game}")
-                    g = typed_g
-                    game_id = typed_g.game_id
-                    begin_time = typed_g.begin_time
-                else:
-                    self.gameId = self.gameId + 1
-                    g = Game(self.gameId, self.game_settings, self.GAMETILES)
-                    game_id = g.game_id
-                    begin_time = g.begin_time
-                    log(f"created a new game.... {g}")
-                    self.games.append(g)
-                    player_id = 0
-                    # Giving player their own socket in dictionary
-                    player = Player(g, int(nofw), player_id, player_name, team_id,
-                                    g.get_game_bag())
-                    # putting player in game
-                    g.add_player(player_id, player)
-                    player.set_notify(NotificationType.INFO, "Waiting for another player to join")
-                    log(f"created first player {player} {g}")
+            open_games = list(filter(lambda _g: _g.game_status.value < GameStatus.ABANDONED.value
+                                                and len(_g.players()) == 1
+                                                and _g.players()[0].name != player_name,
+                                     self.games))
+            if len(open_games) > 0:
+                latest_g = open_games[0]
+                return latest_g
+
+            return None
+
+        player = None
+        # if requested game of the player don't exists anymore.
+        if g is None:
+            unpaired_game = get_latest_unpaired_game()
+            if unpaired_game is not None:
+                typed_g: Game = unpaired_game
+                player_id = 1
+                player = Player(typed_g, int(nofw), player_id, player_name, team_id,
+                                unpaired_game.get_game_bag())
+                typed_g.add_player(player_id, player)
+                log(f"attaching new player {player} to an existing game {unpaired_game}")
+                g = typed_g
+                game_id = typed_g.game_id
+                begin_time = typed_g.begin_time
             else:
-                assert isinstance(g, Game)
-                player = g.player_joined(player_id, team_id)
-                assert player.session_id == str(data)
-                log(f"resuming for player {player} in an existing game {g}")
+                self.gameId = self.gameId + 1
+                g = Game(self.gameId, self.game_settings, self.GAMETILES)
+                game_id = g.game_id
+                begin_time = g.begin_time
+                log(f"created a new game.... {g}")
+                self.games.append(g)
+                player_id = 0
+                # Giving player their own socket in dictionary
+                player = Player(g, int(nofw), player_id, player_name, team_id,
+                                g.get_game_bag())
+                # putting player in game
+                g.add_player(player_id, player)
+                player.set_notify(NotificationType.INFO, "Waiting for another player to join")
+                log(f"created first player {player} {g}")
+        else:
+            assert isinstance(g, Game)
+            player = g.player_joined(player_id, team_id)
+            assert player.session_id == str(data)
+            log(f"resuming for player {player} in an existing game {g}")
 
-            def create_session_id():
-                return str(f"[g={game_id}]-[t={team_id}]-[p={player_id}]-"
-                           f"[{player_name}]-[{begin_time}]")
+        def create_session_id():
+            return str(f"[g={game_id}]-[t={team_id}]-[p={player_id}]-"
+                       f"[{player_name}]-[{begin_time}]")
 
-            player.client_ip_address = cs.c_addr[0]
-            g.set_server_message(f"{player.name} handshake complete")
-            player.session_id = create_session_id()
-            return g, player
+        player.client_ip_address = ip_addr
+        g.set_server_message(f"{player.name} handshake complete")
+        player.session_id = create_session_id()
+        return g, player
+
+    def handle_player_registration(self, data: str):
+        ds0, ds1, ds2 = data.split(SURVEY_QSEQ_DELIM)
+        si0 = deserialize_survey_input_result(ds0)
+        sg1 = deserialize_survey_grid_result(ds1)
+        sg2 = deserialize_survey_grid_result(ds2)
+        player_name = si0[0][1].strip('"')
+        if len(player_name) <= 0:
+            log("blank player")
+        log(f"Adding new Player....{player_name}")
+        if len(player_name.split(' ')) > 0:
+            player_name = player_name.split(' ')[0]
+        player_file_name = os.path.join(self.game_settings['store_path'],
+                                        f"{player_name}.csv")
+
+        def commit(file, q, r):
+            sq = str(q).replace("\"", '')
+            sres = str(r).replace("\"", '')
+            e = ",".join([sq, sres])
+            log(str(e))
+            csv.writer(file, quoting=csv.QUOTE_ALL).writerow([sq, sres])
+
+        if not os.path.exists(player_file_name):
+            log(f"persisting player information for {player_name}")
+            _file = open(player_file_name, 'w', True)
+            for _s in [si0, sg1, sg2]:
+                [commit(_file, q, r) for q, r in _s]
+            _file.flush()
+            return True
+        return False
 
 
-
-
-if __name__ == '__main__':
+def main():
     s = Server()
     with SignalHandler(s.signal_handler):
         s.main()
+
+
+if __name__ == '__main__':
+    main()
+

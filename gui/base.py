@@ -29,42 +29,10 @@ class SpriteSheet:
         return all_sprites
 
 
-#
-# class UIBag(Display):
-#     def __init__(self, h_margin_cells, v_margin_cells, num_cells):
-#         super().__init__(h_margin_cells, v_margin_cells, num_cells, num_cells)
-#         path = os.path.dirname(__file__)
-#         self.image = pygame.image.load(os.path.join(path, "tiles", "bag-4.png")).convert()
-#         im_sz = num_cells * Display.TILE_SIZE
-#         self.image = pygame.transform.scale(self.image, (im_sz, im_sz))
-#         # self.image = pygame.transform.scale(
-#         #     pygame.image.load(os.path.join("Tiles", "bag-icon.png")).convert(),
-#         #     (100, 50))
-#         self.image.set_colorkey(self.image.get_at((0, 0)))
-#         self.rect = self.image.get_rect()
-#         self.count = 100
-#         self.refresh_dims()
-#
-#     def drawMe(self):
-#         Display.surface().blit(self.image, self.rect)
-#
-#     def refresh_dims(self):
-#         super().refresh_dims()
-#         self.rect = self.image.get_rect()
-#         self.rect.x = self.x
-#         self.rect.y = self.y
-
-# def is_server_alive(sip):
-#     import nmap, socket
-#     scanner = nmap
-#     host = socket.gethostbyname(sip)
-#     scanner.scan(host, '1', '-v')
-#     return scanner[host].state()
-#
-
 def main():
     _reset = _restore = False
     _ping_check = True
+    _discover_server = True
     user = server = ""
     port = 0
     import re
@@ -93,27 +61,35 @@ def main():
                 port = int(sys.argv[i])
             else:
                 port = int(sys.argv[i].split('=')[1])
-        elif re.match("-npck|--no-ping-check", sys.argv[i].lower().strip()):
+        elif re.match("-noping|--no-ping-check", sys.argv[i].lower().strip()):
             _ping_check = False
 
-    Display.init()
-    _main_m = MainMenu(False, False)
-    if _main_m.server_endpoint is not None and len(server.strip()) <= 0:
-        server_ep = _main_m.server_endpoint
-        log(f"Server from the client settings file {server_ep}")
-        server = server_ep.split(':')[0]
+        elif re.match("-nodisco|--no-server-discovery", sys.argv[i].lower().strip()):
+            _discover_server = False
 
-    if _ping_check and len(server.strip()) > 0 and os.system("ping -c 1 " + server) == 0:
-        _main_m.server_endpoint = f"{server}:{port}"
-    elif len(server.strip()) <= 0:
+    Display.init()
+
+    _main_m = MainMenu(_reset, _restore)
+
+    if len(server.strip()) > 0:
+        _main_m.set_ip(server.strip())
+        _discover_server = False
+
+    if port > 0:
+        _main_m.set_port(port)
+
+    ip = _main_m.get_ip()
+    if _ping_check and os.system("ping -c 1 " + ip) == 0:
+        # all good
+        _discover_server = False
+
+    if _discover_server:
         try:
             _main_m.discover_game_server(_ping_check)
         except Exception as exp:
             log("ALERT! Discovery of Server Failed ", exp)
 
     _main_m.controls[0].set_text(user if len(user) > 0 else None)
-    # _main_m.controls[1].set_text(server if len(server) > 0 else None)
-    # _main_m.controls[2].set_text(port if port > 0 else None)
     from gui.gameui import GameUI
     gui = GameUI(_main_m)
     gui.main()

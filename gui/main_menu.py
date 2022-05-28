@@ -1,32 +1,29 @@
 """
 Shows the main menu for the game, gets the user name before starting
 """
+import sys
 from typing import Optional
 
 import pygame
+import pygame_widgets
+import yaml
 from pygame.event import Event
 
 from common.gameconstants import *
 from common.logger import log, logger
+from common.network import Network
 from common.utils import write_file
 from gui.button import TextButton, MessageBox, InputText, RadioButton
 from gui.gui_common.display import Display
-import yaml
-import sys
-
 from gui.login.informed_consent import InformedConsent
 from gui.login.pregame_survey import PreGameSurvey
-from gui.survey.surveyform import SurveyForm
 
 
 class MainMenu:
     BG = (255, 255, 255)
 
     def __init__(self, user_reset: bool, restore_from_default: bool):
-        # self.name = ""
         self.wc_state = WelcomeState.INIT
-        # Display.init()
-        # self.surface = Display.surface()
         self.scr_w, self.scr_h = Display.dims()
         self.x, self.y = self.scr_w // 6, self.scr_h // 6
         self.surface = pygame.Surface.subsurface(Display.surface(),
@@ -60,19 +57,14 @@ class MainMenu:
                 log("settings.yaml error ", exc)
                 pygame.quit()
                 sys.exit()
-        # self.widgets: [WidgetBase] = []
         self.login_button: Optional[TextButton] = None
         self.new_user_reg: Optional[TextButton] = None
         self.create_screen_layout()
         self.messagebox = None
-        if self.game_settings.__contains__('target_server_defaults'):
-            svr_defs = self.game_settings['target_server_defaults']
-            if len(svr_defs['ip'].strip()) > 0 and len(svr_defs['port'].strip()) > 0:
-                self.server_endpoint = f"{svr_defs['ip']}:{svr_defs['port']}"
-            else:
-                self.server_endpoint = None
-        else:
-            self.server_endpoint = None
+        self.svr_defs = self.game_settings['target_server_defaults']
+        self.server_ip = self.svr_defs['ip'].strip()
+        self.server_port: int = int(self.svr_defs['port'].strip())
+        self.server_socket_timeout: int = int(self.svr_defs['socket_timeout'])
 
         self.informed_consent_done = False
 
@@ -98,22 +90,12 @@ class MainMenu:
                                             fill_color=Colors.WHITE)
             for u in _users:
                 self.user_choices.add_option(u)
-                def_usr = u if len(def_usr) == 0 else def_usr
-            # self.user_choices.show()
+                # def_usr = u if len(def_usr) == 0 else def_usr
 
-        self.controls.append(InputText(c_x, c_y,
+        self.controls.append(InputText(self.surface, Display.font(), c_x, c_y,
                                        "Type a Name: ",
                                        def_usr,
                                        in_focus=True))
-
-        # self.controls.append(InputText(c_x, c_y * 5,
-        #                                "Connect to Server: ",
-        #                                self.game_settings['target_server_defaults']['ip'],
-        #                                max_length=16))
-        #
-        # self.controls.append(InputText(c_x, c_y * 10,
-        #                                "Connect to Server Port: ",
-        #                                self.game_settings['target_server_defaults']['port']))
 
         button_features = (5 * TILE_ADJ_MULTIPLIER, 1.5 * TILE_ADJ_MULTIPLIER, Colors.GREEN)
         self.login_button = TextButton((self.scr_w // 3.5) // INIT_TILE_SIZE,
@@ -128,12 +110,8 @@ class MainMenu:
     def login(self):
         self.wc_state = WelcomeState.INPUT_COMPLETE
 
-    def draw(self, input_game):
+    def draw(self, input_game, events):
         self.surface.fill(Colors.WHITE.value)
-        # title = Display.title("Welcome to BuyGame !")
-        # self.surface.blit(title, (display_width / 2 - title.get_width() / 2, 50))
-        # name = Display.name("Type a Name: " + self.name)
-        # self.surface.blit(name, (100, 400))
         for _c in self.controls:
             _c.draw(self.surface)
         if self.login_button is not None:
@@ -145,16 +123,10 @@ class MainMenu:
         if self.user_choices is not None:
             self.user_choices.draw(self.surface)
 
-        # if self.wc_state == WelcomeState.INPUT_COMPLETE:
-        #     enter = Display.enter_prompt("In Queue...")
-        #     self.surface.blit(enter, (display_width / 2 - title.get_width() / 2, 800))
-        # else:
-        #     enter = Display.enter_prompt("Press enter to join a game...")
-        #     self.surface.blit(enter, (display_width / 2 - title.get_width() / 2, 800))
         if self.messagebox is not None:
             self.messagebox.draw(self.surface)
 
-        # input_game.surface.blit(self.surface, (self.x, self.y))
+        pygame_widgets.update(events)  # Call once every loop to allow widgets to render and listen
         pygame.display.update()
 
         if self.wc_state == WelcomeState.GAME_CONNECT:
@@ -170,22 +142,13 @@ class MainMenu:
         while run:
             clock.tick(FPS)
             if self.wc_state == WelcomeState.INPUT_COMPLETE:
-                # response = self.n.send({-1:[]})
-                # if response:
-                #     run = False
                 try:
                     if g is None:
                         log("creating GameUI")
                         g = GameUI(self)
-                    if self.server_endpoint is None and len(self.controls) > 2:
-                        self.server_endpoint = self.controls[1].text + ":" + self.controls[2].text
-                    # for player in response:
-                    # p = PlayerGUI(player)
-                    # g.players.append(p)
                     g.reinitialize()
                     g.handshake()
                     return
-                    # g.main()
                 except (OSError, OverflowError) as e:
                     if self.messagebox is None:
                         if isinstance(e, OSError) and e.errno == 61:
@@ -316,8 +279,7 @@ class MainMenu:
 
             # self.surface.fill(Colors.LTS_GRAY.value)
             # self.surface.fill(self.BG)
-            # pygame_widgets.update(events)  # Call once every loop to allow widgets to render and listen
-            self.draw(input_game)
+            self.draw(input_game, events)
 
         self.save_gamesettings()
 
@@ -349,43 +311,52 @@ class MainMenu:
         import requests as reqs
         from bs4 import BeautifulSoup
         import re
+        try:
+            response = reqs.get('http://soubhik.info/games', verify=False)
+            page = BeautifulSoup(response.content, 'html.parser')
+            nested_page = page.find('iframe')['srcdoc']
+            buygame_section = BeautifulSoup(nested_page, 'html.parser')
+            buygame_url = list(map(lambda x: str(x).replace('\n', '').strip(),
+                                   buygame_section.body.find('buygame')))[0]
 
-        response = reqs.get('http://soubhik.info/games', verify=False)
-        page = BeautifulSoup(response.content, 'html.parser')
-        nested_page = page.find('iframe')['srcdoc']
-        buygame_section = BeautifulSoup(nested_page, 'html.parser')
-        buygame_url = list(map(lambda x: str(x).replace('\n', '').strip(),
-                               buygame_section.body.find('buygame')))[0]
-
-        pattern = re.compile('.*buygame-endpoint->\s*(.*)', re.M)
-        self.server_endpoint = pattern.match(buygame_url).group(1)
-        log(self.server_endpoint)
-        ep = self.server_endpoint.split(':') if self.server_endpoint is not None else None
-        if ep is not None and len(ep) > 1:
-            ip = ep[0]
-            if _ping_check and os.system("ping -c 1 " + ip) == 0:
-                log("server is alive")
-            svr_defs = self.game_settings['target_server_defaults']
-            svr_defs['ip'] = ip
-            svr_defs['port'] = ep[1]
-            self.save_gamesettings()
+            pattern = re.compile('.*buygame-endpoint->\s*(.*)', re.M)
+            server_endpoint = pattern.match(buygame_url).group(1)
+            if server_endpoint is None:
+                log("ERROR couldn't discover server endpoint.")
+            log(server_endpoint)
+            ep = server_endpoint.split(':')
+            if ep is not None and len(ep) > 1:
+                ip = ep[0]
+                if _ping_check and os.system("ping -c 1 " + ip) == 0:
+                    log("server is alive")
+                self.set_ip(ip)
+                self.set_port(ep[1])
+                self.save_gamesettings()
+        except Exception as ex:
+            log("ERROR in discovering server", ex)
+            raise
 
     def get_ip(self):
-        if len(self.controls) > 1:
-            return self.controls[1].text
-        elif self.server_endpoint is not None:
-            server, _ = self.server_endpoint.split(':')
-            return server
+        return self.server_ip
+
+    def set_ip(self, ip):
+        self.server_ip = ip
+        self.svr_defs['ip'] = ip
 
     def get_port(self):
-        if len(self.controls) > 2:
-            return self.controls[2].text
-        elif self.server_endpoint is not None:
-            _, port = self.server_endpoint.split(':')
-            return port
+        return self.server_port
+
+    def set_port(self, port):
+        self.server_port = int(port)
+        self.svr_defs['port'] = port
+
+    def get_socket_timeout(self):
+        return self.server_socket_timeout
 
     def input_validation_failed(self):
         c = self.controls[self.cur_input_field]
+        c.end_input()
+        c.hide()
         if len(c.text.strip()) == 0:
             msg = " " + c.p_text + " cannot be empty"
             self.messagebox = MessageBox(self.surface.get_width(), self.surface.get_height(),
@@ -397,60 +368,17 @@ class MainMenu:
         return False
 
     def register_new_user(self):
-        ic = InformedConsent()
-        ic.main()
-        self.informed_consent_done = True
-        s = PreGameSurvey()
-        s.add_input_fields()
-        s.add_grid_1()
-        s.add_grid_2()
-        s.main()
+        try:
+            self.controls[self.cur_input_field].hide()
+            ic = InformedConsent()
+            ic.main()
+            self.informed_consent_done = True
+            s = PreGameSurvey(self.send_survey)
+            s.main()
+        finally:
+            self.controls[self.cur_input_field].show()
 
-        # gameconstants.DISPLAY_TILE_GRID = True
-        # self.post_game_survey = Survey(self.submit_post_game_survey)
-        # s = self.post_game_survey
-        # s.add_post_game_survey_grid()
-        # s.add_post_game_survey_inputs()
-        # pass
-
-# def main():
-#     _reset: bool = False
-#     _restore: bool = False
-#     user = server = ""
-#     port = 0
-#     import re
-#     for i in range(len(sys.argv)):
-#         if re.match("-ur|--user-reset", sys.argv[i].lower().strip()):
-#             _reset = True
-#         elif re.match("-rs|--restore", sys.argv[i].lower().strip()):
-#             _restore = True
-#         elif re.match("-u[\b]*|--user=", sys.argv[i].lower().strip()):
-#             if sys.argv[i].strip() == "-u":
-#                 i += 1 if i < len(sys.argv) - 1 else 0
-#                 user = sys.argv[i]
-#             else:
-#                 user = str(sys.argv[i]).split('=')[1]
-#
-#         elif re.match("-s[\b]*|--server=", sys.argv[i].lower().strip()):
-#             if sys.argv[i].strip() == "-s":
-#                 i += 1 if i < len(sys.argv) - 1 else 0
-#                 server = sys.argv[i]
-#             else:
-#                 server = str(sys.argv[i]).split('=')[1]
-#         elif re.match("-p[\b]*|--port=", sys.argv[i].lower().strip()):
-#             if sys.argv[i].strip() == "-p":
-#                 i += 1 if i < len(sys.argv) - 1 else 0
-#                 port = int(sys.argv[i])
-#             else:
-#                 port = int(sys.argv[i]).split('=')[1]
-#
-#     Display.init()
-#     _main = MainMenu(_reset, _restore)
-#     _main.controls[0].set_text(user if len(user) > 0 else None)
-#     _main.controls[1].set_text(server if len(server) > 0 else None)
-#     _main.controls[2].set_text(port if port > 0 else None)
-#     _main.run()
-#
-#
-# if __name__ == "__main__":
-#     main()
+    def send_survey(self, req: ClientMsgReq, msg):
+        n = Network(self.get_ip(), self.get_port(), "-", "-", self.get_socket_timeout())
+        res = n.send_user_registration(req, msg)
+        log(f"Registration {res}")

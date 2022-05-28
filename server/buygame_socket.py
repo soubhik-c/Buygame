@@ -1,12 +1,12 @@
 from datetime import datetime
-from socket import socket
 
 from common.player import Player
 
 
 class ClientSocket:
-    def __init__(self, c_soc: socket, client_address):
-        self.socket = c_soc
+    def __init__(self, c_soc, client_address):
+        from socket import socket
+        self.socket: socket = c_soc
         self.c_addr = client_address
         self.last_hb_received = datetime.now()
         self.is_active = True
