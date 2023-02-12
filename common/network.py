@@ -87,9 +87,9 @@ class Network:
                 resp = receive_message(self.client)
                 if VERBOSE:
                     log("HB received " + str(resp))
-                if str(resp) == ClientMsgReq.HeartBeat.msg:
+                if resp is not None and str(resp) == ClientMsgReq.HeartBeat.msg:
                     self.is_connected = True
-                elif bool(resp) is False:
+                elif resp is None:
                     self.is_connected = False
             except Exception as e:
                 log("heartbeat failed with ", e)
@@ -137,8 +137,13 @@ class Network:
             raise
         finally:
             self.is_connected = False
-            self.client.shutdown(1)
-            self.client.close()
+            try:
+                self.client.shutdown(1)
+            except Exception as ignore:
+                if VERBOSE:
+                    log("SendRegistration:Network:Connect client socket shutdown failed: ", ignore)
+            finally:
+                self.client.close()
 
     def __connect(self, try_closing: bool) -> Game:
         self.client = self.create_client_socket(try_closing)

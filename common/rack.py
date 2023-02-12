@@ -31,8 +31,9 @@ class Rack:
         value = self.get_temp_value()
         # for now stick to variation 1, whereby tiles are out of play
         # and doesn't returned to the bag
+        arr = self.get_temp_arr().copy()
         self.get_temp_arr().clear()
-        return value
+        return value, arr
 
     def add_wild_to_rack(self, nofw, bag):
         for i in range(nofw):

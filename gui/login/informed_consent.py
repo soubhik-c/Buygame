@@ -10,6 +10,7 @@ from gui.gui_common.display import Display
 from gui.gui_common.fontmixin import FontMixin
 from gui.gui_common.subsurface import SubSurface
 from pygame_widgets.textbox import TextBox
+from os import path
 
 
 class InformedConsent(FontMixin, SubSurface):
@@ -21,15 +22,19 @@ class InformedConsent(FontMixin, SubSurface):
         self.set_num_chars_per_line(130)
         self._layer = SubSurface._SS_BASE_LAYER
         self.run = True
-        path = os.path.dirname(__file__)
-        filename = os.path.join(path, "..", "tiles", "bentley-logo.jpg")
+        cur_path = path.dirname(__file__)
+        logo_fn = "bentley-logo.jpg"
+        filename = path.abspath(path.join(cur_path, "..", "tiles", logo_fn))
         try:
+            if not path.exists(filename):
+                log(f"File name ${filename} doesn't exists..")
             bentley_logo = pygame.image.load(filename).convert()
             lr = bentley_logo.get_rect()
             self.image = pygame.transform.scale(bentley_logo, (lr.width // 2, lr.height // 2))
-        except pygame.error:
+        except (pygame.error, FileNotFoundError) as err:
             log("Unable to load: %s " % filename)
-            raise SystemExit
+            self.image = None
+
         self.header = []
         self.section_pages = []
         self.sec_pos = 0
@@ -62,7 +67,7 @@ class InformedConsent(FontMixin, SubSurface):
                         (event.type == KEYUP and event.key == K_ESCAPE):
                     self.run = False
                     pygame.quit()
-                    quit()
+                    raise SystemExit
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse = self.mousexy()
                     self.mouse_down(mouse)
@@ -220,11 +225,12 @@ class InformedConsent(FontMixin, SubSurface):
 
     def draw_header(self):
         # bentley-logo
-        self.surface.blit(self.image,
-                          (.5 * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE,
-                           .5 * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE,
-                           self.image.get_width(),
-                           self.image.get_height()))
+        if self.image is not None:
+            self.surface.blit(self.image,
+                              (.5 * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE,
+                               .5 * TILE_ADJ_MULTIPLIER * INIT_TILE_SIZE,
+                               self.image.get_width(),
+                               self.image.get_height()))
         [self.surface.blit(h[0], h[1]) for h in self.header]
 
     def draw(self, events):
@@ -274,7 +280,7 @@ class InformedConsent(FontMixin, SubSurface):
         yoffset = INIT_TILE_SIZE
         for _i, it in enumerate(input_texts):
             lw = self.get_pixel_offset(it[0])[0]
-            numspaces = ((50 * INIT_TILE_SIZE) - lw)//pcw
+            numspaces = ((50 * INIT_TILE_SIZE) - lw) // pcw
             part1 = it[0] + "_" * numspaces
             part2 = it[1] + "_" * 20
             sign = self.render_line(part1 + " " + part2)
@@ -282,7 +288,7 @@ class InformedConsent(FontMixin, SubSurface):
                         zip(self.get_pixel_offset(it[0]), self.get_pixel_offset(part1))]
             self.surface.blit(sign, sign.get_rect(topleft=(basex, basey + acc_ht)))
             if _i == 0 and self.user_sign is None:
-                self.user_sign = TextBox(self.surface, basex+lw+INIT_TILE_SIZE, basey-yoffset, tw, th, **kwargs)
+                self.user_sign = TextBox(self.surface, basex + lw + INIT_TILE_SIZE, basey - yoffset, tw, th, **kwargs)
             elif self.user_sign is not None:
                 self.user_sign.enable()
                 self.user_sign.show()

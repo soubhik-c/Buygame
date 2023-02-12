@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version=0.6
+version=0.7
 
 [[ -d build ]] && rm -r build
 [[ -d dist ]] && rm -r dist
@@ -9,7 +9,9 @@ if [[ "`uname`" =~ "MINGW64" ]]; then
   [[ -f pyi-buygame-win.spec ]] && rm pyi-buygame-win.spec 
   [[ -f buygame-${version}.exe ]] && rm buygame-${version}.exe
 
-  pyi-makespec.exe -w -F --paths venv/Lib/site-packages --paths gui --path gui/login --path gui/survey --path gui/gui_common --paths common --add-data "gui\tiles;gui\tiles" buygame.py -n pyi-buygame-win
+  pyi-makespec.exe -w --onefile --paths venv/Lib/site-packages --paths gui --path gui/login --path gui/survey --path gui/gui_common --paths common --add-data "gui\tiles;gui\tiles" buygame.py \
+    --icon gui/tiles/bentley-logo.jpg \
+    --windowed --onefile -n pyi-buygame-win
 
   pyinstaller --clean ./pyi-buygame-win.spec
 
@@ -21,7 +23,7 @@ elif [[ "`uname`" =~ "Darwin" ]]; then
   [[ -d buygame-${version}-mac.app ]] && rm -r buygame-${version}-mac.app
   [[ `which create-dmg` =~ 'not found' ]] && brew install create-dmg
 
-  pyi-makespec -w -F --paths venv/Lib/site-packages --paths gui --path gui/login --path gui/survey --path gui/gui_common --paths common --add-data "gui/tiles:gui/tiles" buygame.py \
+  pyi-makespec -w --onefile --paths venv/Lib/site-packages --paths gui --path gui/login --path gui/survey --path gui/gui_common --paths common --add-data "gui/tiles:gui/tiles" buygame.py \
     --icon gui/tiles/bentley-logo.jpg \
     --windowed --onefile -n pyi-buygame-mac
 
@@ -47,7 +49,7 @@ elif [[ "`uname`" =~ "Darwin" ]]; then
      --icon "pyi-buygame-mac.app" 175 120 \
      --hide-extension "pyi-buygame-mac.app" \
      --app-drop-link 425 120 \
-     "dist/buygame.dmg" \
+     "dist/buygame-${version}.dmg" \
      "dist/dmg/"
  
 fi

@@ -371,7 +371,7 @@ class Server:
         retries = MAX_RETRY
         while self.is_server_active:
             payload = receive_message(cs.socket, True)
-            if not bool(payload):
+            if payload is None:
                 if retries > 0:
                     retries -= 1
                     continue

@@ -113,9 +113,9 @@ class Player:
         return self
 
     def skip_buy(self, bag):
-        value = self.rack.rollback_rack(bag)
+        value, discarded_rack = self.rack.rollback_rack(bag)
         self.txn_status = Txn.BUY_SKIPPED
-        self.game.player_buying(self, value)
+        self.game.player_buying(self, value, buy_rack=discarded_rack)
 
     def word_check(self, word):
         word = word.upper()

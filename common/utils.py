@@ -98,11 +98,11 @@ def receive_message(client_socket, block: bool = False):
             try:
                 msg_type, message_length = parse_std_hdr(recvall(client_socket, STD_HEADER_LENGTH))
                 if not block and msg_type is None:
-                    return False
+                    return None
             except BrokenPipeError as bpe:
                 if VERBOSE:
                     log(f"Unable to read std header in {calling_func_name(1)}:- {bpe.__str__()}")
-                return False
+                return None
         assert msg_type == ObjectType.MESSAGE
         return deserialize(msg_type, recvall(client_socket, message_length))
     except Exception as e:
