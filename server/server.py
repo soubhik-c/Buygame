@@ -6,9 +6,11 @@ Created on Fri Mar 26 13:40:58 2021
 """
 import csv
 import datetime
+import faulthandler
 import os
 import signal
 import socket
+import sys
 # import thread module
 import threading
 import time
@@ -100,6 +102,9 @@ class Server:
         elif sig == signal.SIGKILL:
             self.is_server_active = False
             self.server_socket.close()
+        elif sig == signal.SIGURG or \
+                sig == signal.SIGUSR1:
+            faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
 
     def main(self):
         # Waiting for players to join lobby and to start game
@@ -217,7 +222,9 @@ class Server:
         # else:
         #     log(f"closing client {stringp} connection.")
 
-        log(f"closing client {stringp} connection.")
+        if _cs.closed:
+            log(f"already closed client {stringp} connection.")
+
         self.number_of_usr -= 1
         # connection closed
         _cs.close(self.threads_list)
@@ -238,6 +245,9 @@ class Server:
                     log(f"Cleaning up player {_cs} socket, last hb received @{_cs.last_hb_received}")
                     stale = self.client_sockets_list.pop(i)
                     stale.mark_inactive()
+                    # without this utils.recv_all keeps trying to read socket getting no data.
+                    stale.close(self.threads_list)
+
                 i -= 1
 
             # handle stale game objects
@@ -508,4 +518,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

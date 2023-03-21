@@ -69,7 +69,7 @@ def receive_pickle(client_socket):
         msg_type: ObjectType = ObjectType.NONE
         while message_length == 0:
             try:
-                msg_type, message_length = parse_std_hdr(recvall(client_socket, STD_HEADER_LENGTH))
+                msg_type, message_length = parse_std_hdr(recv_all(client_socket, STD_HEADER_LENGTH))
                 if msg_type is None:
                     return False
             except BrokenPipeError as bpe:
@@ -81,7 +81,7 @@ def receive_pickle(client_socket):
         # assert msg_type == ObjectType.OBJECT
 
         # print("message_length", message_length)
-        message = recvall(client_socket, message_length)
+        message = recv_all(client_socket, message_length)
         assert len(message) == message_length
 
         return deserialize(msg_type, message)
@@ -96,7 +96,7 @@ def receive_message(client_socket, block: bool = False):
         msg_type: ObjectType = ObjectType.NONE
         while message_length == 0:
             try:
-                msg_type, message_length = parse_std_hdr(recvall(client_socket, STD_HEADER_LENGTH))
+                msg_type, message_length = parse_std_hdr(recv_all(client_socket, STD_HEADER_LENGTH))
                 if not block and msg_type is None:
                     return None
             except BrokenPipeError as bpe:
@@ -104,18 +104,25 @@ def receive_message(client_socket, block: bool = False):
                     log(f"Unable to read std header in {calling_func_name(1)}:- {bpe.__str__()}")
                 return None
         assert msg_type == ObjectType.MESSAGE
-        return deserialize(msg_type, recvall(client_socket, message_length))
+        return deserialize(msg_type, recv_all(client_socket, message_length))
     except Exception as e:
         log("receive message failed with: ", e)
         raise
 
 
-def recvall(sock, size):
+def recv_all(sock, size):
     received_chunks = []
     buf_size = 4096
     remaining = size
     while remaining > 0:
-        received = sock.recv(min(remaining, buf_size), socket.MSG_WAITALL)
+        try:
+            received = sock.recv(min(remaining, buf_size), socket.MSG_WAITALL)
+        except OSError as err:
+            # server.cleanup_thread can close an ever pending socket read.
+            if err.errno == 9:  # Bad File Descriptor
+                raise BrokenPipeError('Bad File Descriptor: connection is closed!')
+            raise
+
         # print(f"len(received) {len(received)} remaining {remaining}")
         if not received:
             raise BrokenPipeError('unexpected EOF. connection is closed ?')

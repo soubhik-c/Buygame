@@ -5,6 +5,9 @@ import signal
 SIGNAL_TRANSLATION_MAP = {
     signal.SIGINT: 'SIGINT',
     signal.SIGTERM: 'SIGTERM',
+    # signal.SIGKILL: 'SIGKILL',
+    signal.SIGURG: 'SIGURG',
+    # signal.SIGUSR1: 'SIGUSR1',
 }
 
 

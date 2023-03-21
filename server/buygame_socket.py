@@ -1,5 +1,7 @@
+from _socket import SHUT_RDWR
 from datetime import datetime
 
+from common.logger import log
 from common.player import Player
 
 
@@ -12,6 +14,7 @@ class ClientSocket:
         self.is_active = True
         self.player = None
         self.thread_name: str = ""
+        self.closed = False
 
     def __repr__(self):
         return f"{self.player.game.game_id}-{self.player.name}-{self.player.number}"
@@ -28,9 +31,20 @@ class ClientSocket:
         self.is_active = False
 
     def close(self, threads_list):
+        if self.closed:
+            return
+        log(f"closing client {self.player.number} connection.")
         # connection closed
-        self.socket.close()
-        for i in range(len(threads_list)):
-            if threads_list[i].name == self.thread_name:
-                threads_list.pop(i)
-                break
+        try:
+            self.socket.shutdown(SHUT_RDWR)
+            self.socket.close()
+        except OSError as ignore:
+            log(f"ignoring unexpected OSError", ignore)
+            pass
+        finally:
+            for i in range(len(threads_list)):
+                if threads_list[i].name == self.thread_name:
+                    threads_list.pop(i)
+                    log(f"cleaned up {self.thread_name} thread.")
+                    self.closed = True
+                    break
