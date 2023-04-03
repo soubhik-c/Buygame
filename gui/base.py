@@ -31,8 +31,6 @@ class SpriteSheet:
 
 def main():
     _reset = _restore = False
-    _ping_check = True
-    _discover_server = True
     user = server = ""
     port = 0
     import re
@@ -61,11 +59,6 @@ def main():
                 port = int(sys.argv[i])
             else:
                 port = int(sys.argv[i].split('=')[1])
-        elif re.match("-noping|--no-ping-check", sys.argv[i].lower().strip()):
-            _ping_check = False
-
-        elif re.match("-nodisco|--no-server-discovery", sys.argv[i].lower().strip()):
-            _discover_server = False
 
     Display.init()
 
@@ -73,21 +66,9 @@ def main():
 
     if len(server.strip()) > 0:
         _main_m.set_ip(server.strip())
-        _discover_server = False
 
     if port > 0:
         _main_m.set_port(port)
-
-    ip = _main_m.get_ip()
-    if _ping_check and os.system("ping -c 1 " + ip) == 0:
-        # all good
-        _discover_server = False
-
-    if _discover_server:
-        try:
-            _main_m.discover_game_server(_ping_check)
-        except Exception as exp:
-            log("ALERT! Discovery of Server Failed ", exp)
 
     _main_m.controls[0].set_text(user if len(user) > 0 else None)
     from gui.gameui import GameUI

@@ -156,7 +156,7 @@ class MainMenu:
                         elif isinstance(e, OSError) and e.errno == 8:
                             msg = f"- Invalid server address. Check [{g.ip}:{g.port}."
                         else:
-                            msg = f"- {e}"
+                            msg = f"- Could not connect to game server {g.ip} - {e}"
                         self.messagebox = MessageBox(self.surface.get_width(), self.surface.get_height(),
                                                      20, 5,
                                                      msg,
@@ -306,35 +306,6 @@ class MainMenu:
         else:
             return
         self.controls[self.cur_input_field].begin_input()
-
-    def discover_game_server(self, _ping_check):
-        import requests as reqs
-        from bs4 import BeautifulSoup
-        import re
-        try:
-            response = reqs.get('http://soubhik.info/games', verify=False)
-            page = BeautifulSoup(response.content, 'html.parser')
-            nested_page = page.find('iframe')['srcdoc']
-            buygame_section = BeautifulSoup(nested_page, 'html.parser')
-            buygame_url = list(map(lambda x: str(x).replace('\n', '').strip(),
-                                   buygame_section.body.find('buygame')))[0]
-
-            pattern = re.compile('.*buygame-endpoint->\s*(.*)', re.M)
-            server_endpoint = pattern.match(buygame_url).group(1)
-            if server_endpoint is None:
-                log("ERROR couldn't discover server endpoint.")
-            log(server_endpoint)
-            ep = server_endpoint.split(':')
-            if ep is not None and len(ep) > 1:
-                ip = ep[0]
-                if _ping_check and os.system("ping -c 1 " + ip) == 0:
-                    log("server is alive")
-                self.set_ip(ip)
-                self.set_port(ep[1])
-                self.save_gamesettings()
-        except Exception as ex:
-            log("ERROR in discovering server", ex)
-            raise
 
     def get_ip(self):
         return self.server_ip

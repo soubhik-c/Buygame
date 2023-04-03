@@ -39,8 +39,9 @@ class ClientSocket:
             self.socket.shutdown(SHUT_RDWR)
             self.socket.close()
         except OSError as ignore:
-            log(f"ignoring unexpected OSError", ignore)
-            pass
+            # skip 57 - Socket is not connected
+            if not ignore.errno == 57:
+                log(f"ignoring unexpected OSError", ignore)
         finally:
             for i in range(len(threads_list)):
                 if threads_list[i].name == self.thread_name:

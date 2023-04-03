@@ -120,8 +120,10 @@ class Network:
             try:
                 log(f"time to connect {self.addr}")
                 return self.__connect(False)
+            except socket.timeout:
+                raise
             except Exception as e:
-                log("failed to connect", e)
+                log("failed to connect ", e)
                 self.is_connected = False
                 raise
 

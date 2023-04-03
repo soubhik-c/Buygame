@@ -1,4 +1,5 @@
 import os
+import socket
 import sys
 from threading import Thread, Event
 from typing import Optional
@@ -624,9 +625,12 @@ class GameUI:
             for n in self.me().notify_msg:
                 self.messagebox_notify(n.get_msg())
             self.refresh_inventory()
+        except socket.timeout as to:
+            log(f"Could not connect to server - {to}")
+            raise
+
         except Exception as e:
             log("gui initialization failed with ", e)
-            log("Couldn't connect")
             raise
             # sys.exit("Cant connect to host")
 
