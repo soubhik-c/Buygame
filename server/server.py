@@ -40,7 +40,7 @@ class Server:
     def __init__(self):
         self.GAMETILES = pd.read_csv(os.path.join(script_path, "tiles.csv"), index_col="LETTER")
         # self.WordDict = pd.read_json(os.path.join(script_path, 'words_dictionary.json'), typ='series').index
-        self.word_dict_csv = pd.read_csv(os.path.join(script_path, 'words_dictionary-2.csv'))  # , index_col='words')
+        self.word_dict_csv = pd.read_csv(os.path.join(script_path, 'words_dictionary_nwl2020.csv'))  # , index_col='words')
 
         # self.IP = "localhost"
         self.IP = "0.0.0.0"
