@@ -49,6 +49,7 @@ echo "found $found files, moved $(find $basefolder/* -type f | wc -l) files to $
 
 
 cd "${basefolder}/remote-data"
+[[ -f users.played ]] && rm -f users.played.*
 echo "processing the newer data files now"
 
 #grep -rl COMPLETED * | xargs grep 'gst=INIT' {} | cut -f7 -d',' 
@@ -57,10 +58,11 @@ echo "processing the newer data files now"
 while read line; do 
 #  echo Processing $line
   grep 'gst=INIT' $line | cut -f7 -d',' >> users.played
+  grep 'gst=INIT' $line >> users.played.full
 done< <(grep -rl COMPLETED *)
 
 echo `pwd`
-cat users.played | sort | uniq > "$rootdir/${year}.${session}.users.played"
+cat users.played | sort | uniq -ic > "$rootdir/${year}.${session}.users.played"
 
 cd "$rootdir"
 cat "${year}.${session}.users.played"
