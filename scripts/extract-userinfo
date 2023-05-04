@@ -1,0 +1,68 @@
+#!/bin/bash
+
+[[ $# != 2 ]] && echo "usage: $0 <year> <session> [sp - spring, su - summer, f - fall ]" && exit
+
+
+year=${1:-2023}
+
+case $2 in
+  spring|sp)
+     session=spring
+     from=$year-01-01
+     to=$year-05-31
+  ;;
+
+  summer|su)
+     session=summer
+     from=$year-06-01
+     to=$year-08-31
+  ;;
+
+  fall|f)
+     session=fall
+     from=$year-09-01
+     to=$year-12-31
+  ;;
+esac
+
+echo "extracting between $from and $to data files"
+
+set +x
+set -e
+
+rootdir=$(cd `dirname $0` && pwd)
+
+#echo $rootdir
+cd "$rootdir"
+
+basefolder=$year/$session
+[[ ! -d $year ]] && echo "creating $basefolder inside $rootdir" && mkdir -p $basefolder
+
+echo "create similar folder structure inside $basefolder"
+while read l; do mkdir -p $basefolder/$l; done< <(find remote-data/* -type f -newermt $from ! -newermt $to | xargs dirname | sort | uniq)
+
+found=$(find remote-data/* -type f -newermt $from ! -newermt $to | wc -l)
+
+find remote-data/* -type f -newermt $from ! -newermt $to -exec mv {} $basefolder\/{} \;
+
+echo "found $found files, moved $(find $basefolder/* -type f | wc -l) files to $basefolder"
+
+
+cd "${basefolder}/remote-data"
+echo "processing the newer data files now"
+
+#grep -rl COMPLETED * | xargs grep 'gst=INIT' {} | cut -f7 -d',' 
+[[ -f users.played ]] && rm users.played
+
+while read line; do 
+#  echo Processing $line
+  grep 'gst=INIT' $line | cut -f7 -d',' >> users.played
+done< <(grep -rl COMPLETED *)
+
+echo `pwd`
+cat users.played | sort | uniq > "$rootdir/${year}.${session}.users.played"
+
+cd "$rootdir"
+cat "${year}.${session}.users.played"
+
+

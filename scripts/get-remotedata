@@ -1,0 +1,9 @@
+#!/bin/bash
+
+[[ $# != 1 ]] && echo "usage: $0 <remote-userid>" && exit
+
+userid=${1}
+
+[[ ! -d data ]] && mkdir remote-data
+cd remote-data
+rsync -trvz -e 'ssh -p 33' $userid@23.239.14.203:/home/buygame/file_storage/* .
