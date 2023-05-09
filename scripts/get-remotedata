@@ -8,4 +8,4 @@ userid=${1}
 cd remote-data
 rsync -trvz -e 'ssh -p 33' $userid@23.239.14.203:/home/buygame/file_storage/* .
 
-chmod -R 777 remote-data
+cd .. && chmod -R 777 remote-data
