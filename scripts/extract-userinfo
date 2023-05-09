@@ -36,7 +36,7 @@ rootdir=$(cd `dirname $0` && pwd)
 cd "$rootdir"
 
 basefolder=$year/$session
-[[ ! -d $year ]] && echo "creating $basefolder inside $rootdir" && mkdir -p $basefolder
+[[ ! -d $year ]] && echo "creating $basefolder inside $rootdir" && mkdir -p $basefolder && chmod -R 777 $year
 
 echo "create similar folder structure inside $basefolder"
 while read l; do mkdir -p $basefolder/$l; done< <(find remote-data/* -type f -newermt $from ! -newermt $to | xargs dirname | sort | uniq)
